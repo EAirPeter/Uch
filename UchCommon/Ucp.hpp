@@ -112,12 +112,13 @@ namespace ImplUcp {
             RAII_LOCK(x_mtx);
             x_vLower.AssignToIoGroup(vIoGroup);
             assert(!x_pIoGroup);
-            x_pIoGroup->RegisterTick(*this);
+            vIoGroup.RegisterTick(*this);
+            x_pIoGroup = &vIoGroup;
             X_PostRead();
         }
 
-        // only in OnPacket
         inline void Shutdown() noexcept {
+            RAII_LOCK(x_mtx);
             x_bStopping = true;
             if (!x_bDirty)
                 x_vLower.Shutdown();
@@ -132,6 +133,7 @@ namespace ImplUcp {
 
         void OnFinalize() noexcept {
             RAII_LOCK(x_mtx);
+            x_bStopping = true;
             x_vUpper.OnFinalize();
         }
 
@@ -165,7 +167,7 @@ namespace ImplUcp {
                 return true;
             }
             x_usNow = usNow;
-            if (x_bDirty || x_usNow >= x_usNext) {
+            if (x_bDirty || StampDue(x_usNow, x_usTimeout)) {
                 x_bDirty = false;
                 try {
                     X_Flush();
@@ -186,7 +188,7 @@ namespace ImplUcp {
         inline void PostPacket(Byte byPakId, ByteBuffer &vPakBuf) {
             if (byPakId >= kbyPakIds)
                 throw ExnIllegalArg {};
-            if (vPakBuf.GetSize() < x_auPakSizes[byPakId])
+            if (vPakBuf.GetSize() > x_auPakSizes[byPakId])
                 throw ExnIllegalArg {};
             RAII_LOCK(x_mtx);
             if (x_bStopping)
@@ -292,6 +294,7 @@ namespace ImplUcp {
         }
 
         inline void X_OnPsh(const SegHdr &vHdr) noexcept {
+            x_bNeedAck = true;
             x_vecSndSaks.emplace_back(vHdr.unSeq);
             assert(x_upFrameRcv->GetReadable() >= vHdr.uzData);
             if (vHdr.unSeq < x_unRcvSeq) {
@@ -316,6 +319,8 @@ namespace ImplUcp {
         }
 
         inline void X_UpdateRtt(U64 utRtt) noexcept {
+            if (static_cast<I64>(utRtt) <= 0) // something happened
+                return;
             // update x_utSRtt, x_utRttVar, x_utRto according to RFC6298
             if (!x_utSRtt) {
                 x_utSRtt = utRtt;
@@ -362,19 +367,23 @@ namespace ImplUcp {
             }
             while (x_byPakId != 0xff && x_uzAsm >= x_auPakSizes[x_byPakId]) {
                 const auto uPakSize = x_auPakSizes[x_byPakId];
-                auto upChunk = ByteChunk::MakeUnique(uPakSize, x_auPakAligns[x_byPakId]);
-                auto uSize = uPakSize;
-                while (uSize) {
-                    auto uToRead = std::min(uSize, pHead->GetReadable());
-                    pHead->Read(upChunk->GetWriter(), uToRead);
-                    upChunk->Skip(uToRead);
-                    uSize -= uToRead;
-                    if (!pHead->IsReadable())
-                        pHead = pHead->Remove()->GetNext();
+                if (uPakSize) {
+                    auto upChunk = ByteChunk::MakeUnique(uPakSize, x_auPakAligns[x_byPakId]);
+                    auto uSize = uPakSize;
+                    while (uSize) {
+                        auto uToRead = std::min(uSize, pHead->GetReadable());
+                        pHead->Read(upChunk->GetWriter(), uToRead);
+                        upChunk->Skip(uToRead);
+                        uSize -= uToRead;
+                        if (!pHead->IsReadable())
+                            pHead = pHead->Remove()->GetNext();
+                    }
+                    x_uzAsm -= uPakSize;
+                    ByteBuffer vPakBuf(std::move(upChunk));
+                    x_vUpper.OnPacket(x_byPakId, std::move(vPakBuf));
                 }
-                x_uzAsm -= uPakSize;
-                ByteBuffer vPakBuf(std::move(upChunk));
-                x_vUpper.OnPacket(x_byPakId, std::move(vPakBuf));
+                else
+                    x_vUpper.OnPacket(x_byPakId, ByteBuffer());
                 if (x_uzAsm) {
                     pHead->Read(&x_byPakId, 1);
                     --x_uzAsm;
@@ -390,15 +399,15 @@ namespace ImplUcp {
         inline void X_Flush() {
             X_PrepareSaks();
             X_PrepareQSnd();
-            const auto unAck = x_unRcvSeq;
             bool bFastResend = false;
             bool bTimedOut = false;
+            x_usTimeout = x_usNow + 0x8000000000000000ULL;
             for (auto pSeg = x_qSnd.GetHead(); pSeg != x_qSnd.GetNil(); pSeg = pSeg->GetNext()) {
                 if (!pSeg->ucSent) {
                     // first time
                     X_EncodeSegment(pSeg);
                 }
-                else if (x_usNow >= pSeg->usTimeout) {
+                else if (StampDue(x_usNow, pSeg->usTimeout)) {
                     // timed out
                     bTimedOut = true;
                     X_EncodeSegment(pSeg);
@@ -440,7 +449,7 @@ namespace ImplUcp {
             while (!x_qPak.IsEmpty() && x_uzSndIdx + x_qPak.GetHead()->GetSize() <= uzBound) {
                 auto upSeg = x_qPak.PopHead();
                 upSeg->unSeq = x_unSndSeq++;
-                upSeg->uzData = static_Cast<U16>(upSeg->GetReadable());
+                upSeg->uzData = static_cast<U16>(upSeg->GetReadable());
                 upSeg->uzIdx = x_uzSndIdx;
                 x_uzSndIdx += upSeg->GetSize();
                 x_qSnd.PushTail(std::move(upSeg));
@@ -448,13 +457,17 @@ namespace ImplUcp {
         }
 
         inline void X_EncodeSegment(SegPayload *pSeg) {
+            x_bNeedAck = false;
             assert(x_upFrameSnd);
+            pSeg->unAck = x_unRcvSeq;
             ++pSeg->ucSent;
             if (pSeg->ucSent > x_kucConnLost)
                 throw ExnIllegalState();
             pSeg->ucSkipped = 0;
             pSeg->usSent = x_usNow;
             pSeg->usTimeout = x_usNow + x_utRto;
+            if (StampBefore(pSeg->usTimeout, x_usTimeout))
+                x_usTimeout = pSeg->usTimeout;
             if (x_upFrameSnd->GetWritable() < pSeg->GetSize())
                 X_PostWrite();
             auto ucSakAppendable = (x_upFrameSnd->GetWritable() - pSeg->GetSize()) / sizeof(U32);
@@ -471,14 +484,16 @@ namespace ImplUcp {
         }
 
         inline void X_EncodeSaks() noexcept {
-            if (x_ucSakSent != x_vecSndSaks.size()) {
+            if (x_bNeedAck || x_ucSakSent != x_vecSndSaks.size()) {
+                x_bNeedAck = false;
                 auto uSakToSend = x_vecSndSaks.size() - x_ucSakSent;
-                SegHdr vHdr {0, unAck, static_cast<U16>(uSakToSend), 0};
+                SegHdr vHdr {0, x_unRcvSeq, static_cast<U16>(uSakToSend), 0};
                 assert(uSakToSend == vHdr.ucSak);
                 if (x_upFrameSnd->GetWritable() < sizeof(SegHdr) + sizeof(U32) * uSakToSend)
                     X_PostWrite();
                 x_upFrameSnd->Write(&vHdr, sizeof(SegHdr));
-                x_upFrameSnd->Write(x_vecSndSaks.data() + x_ucSakSent, sizeof(U32) * uSakToSend);
+                if (uSakToSend)
+                    x_upFrameSnd->Write(x_vecSndSaks.data() + x_ucSakSent, sizeof(U32) * uSakToSend);
             }
             x_vecSndSaks.clear();
             x_ucSakSent = 0;
@@ -490,7 +505,7 @@ namespace ImplUcp {
             try {
                 x_vLower.PostRead(x_upFrameRcv.get());
             }
-            catch (ExnSockRead) {
+            catch (ExnSockRead &) {
                 // just let the RDT handle this
             }
             catch (ExnIllegalState) {
@@ -502,7 +517,7 @@ namespace ImplUcp {
             try {
                 x_vLower.Write(std::move(x_upFrameSnd));
             }
-            catch (ExnSockWrite) {
+            catch (ExnSockWrite &) {
                 // just let the RDT handle this
             }
             catch (ExnIllegalState) {
@@ -529,10 +544,11 @@ namespace ImplUcp {
         Byte x_byPakId = 0xff;
 
     private:
-        bool x_bBroken = false; // whether Ucp is closed due to timed out
-        bool x_bDirty = false;  // whether flush is needed
-        U64 x_usNow = 0;        // last tick time
-        U64 x_usNextResend = 0; // next time for resend
+        bool x_bBroken = false;  // whether Ucp is closed due to timed out
+        bool x_bDirty = false;   // whether flush is needed
+        bool x_bNeedAck = false; // whether an empty ack segment is needed
+        U64 x_usNow = 0;         // last tick time
+        U64 x_usTimeout = 0;     // next time for resend
 
         U64 x_utRttVar = 0;        // RTTVAR in RFC6298
         U64 x_utSRtt = 0;          // SRTT in RFC6298

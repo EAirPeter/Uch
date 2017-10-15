@@ -46,7 +46,7 @@ public:
     }
 
     constexpr USize GetWritable() const noexcept {
-        return static_cast<USize>(reinterpret_cast<const Byte *>(this) - x_pWriter);
+        return kuCapacity - static_cast<USize>(x_pWriter - x_abyData);
     }
 
     constexpr Byte *GetData() noexcept {
