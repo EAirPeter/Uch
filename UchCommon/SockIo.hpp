@@ -168,24 +168,24 @@ private:
 
 private:
     inline void X_IocbOnRecv(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
-        RAII_LOCK(x_mtx);
         if (dwRes)
             x_vUpper.OnRead(dwRes, 0, std::move(pChunk));
         else {
             pChunk->Skip(uDone);
             x_vUpper.OnRead(0, uDone, std::move(pChunk));
         }
+        RAII_LOCK(x_mtx);
         X_EndRecv();
     }
 
     inline void X_IocbOnSend(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
-        RAII_LOCK(x_mtx);
         if (dwRes)
             x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<ByteChunk>(pChunk));
         else {
             pChunk->Discard(uDone);
             x_vUpper.OnWrite(0, uDone, std::unique_ptr<ByteChunk>(pChunk));
         }
+        RAII_LOCK(x_mtx);
         X_EndSend();
     }
 
@@ -205,6 +205,7 @@ private:
     Upper &x_vUpper;
 
     RecursiveMutex x_mtx;
+    Mutex x_mtxCore;
     bool x_bStopping = false;
     bool x_bFinalized = false;
 

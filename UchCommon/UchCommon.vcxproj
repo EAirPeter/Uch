@@ -146,6 +146,7 @@
     <ClInclude Include="SockName.hpp" />
     <ClInclude Include="StaticChunk.hpp" />
     <ClInclude Include="TestCommon.hpp" />
+    <ClInclude Include="Debug.hpp" />
     <ClInclude Include="Uftp.hpp" />
     <ClInclude Include="Ucp.hpp" />
   </ItemGroup>

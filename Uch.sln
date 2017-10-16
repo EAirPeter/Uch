@@ -19,6 +19,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchTestUcp", "UchTestUcp\Uc
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchTestCallback", "UchTestCallback\UchTestCallback.vcxproj", "{36BC2ECC-BBF0-4C58-82E0-C03A0BDF3713}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchTestProxy", "UchTestProxy\UchTestProxy.vcxproj", "{E64719D3-17E1-451F-AFEE-C61A52CD730E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -67,6 +69,14 @@ Global
 		{36BC2ECC-BBF0-4C58-82E0-C03A0BDF3713}.Release|x64.Build.0 = Release|x64
 		{36BC2ECC-BBF0-4C58-82E0-C03A0BDF3713}.Release|x86.ActiveCfg = Release|Win32
 		{36BC2ECC-BBF0-4C58-82E0-C03A0BDF3713}.Release|x86.Build.0 = Release|Win32
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Debug|x64.ActiveCfg = Debug|x64
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Debug|x64.Build.0 = Debug|x64
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Debug|x86.ActiveCfg = Debug|Win32
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Debug|x86.Build.0 = Debug|Win32
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Release|x64.ActiveCfg = Release|x64
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Release|x64.Build.0 = Release|x64
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Release|x86.ActiveCfg = Release|Win32
+		{E64719D3-17E1-451F-AFEE-C61A52CD730E}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

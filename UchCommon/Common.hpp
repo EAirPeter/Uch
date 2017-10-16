@@ -38,6 +38,8 @@
 
 using Byte = unsigned char;
 using USize = std::size_t;
+using UPtr = std::uintptr_t;
+using IPtr = std::intptr_t;
 using U8 = std::uint8_t;
 using U16 = std::uint16_t;
 using U32 = std::uint32_t;
