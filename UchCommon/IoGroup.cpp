@@ -77,11 +77,11 @@ VOID IoGroup::X_TpcbOnTimer(
     if (!pCtx->mtx.TryAcquire()) // lag
         return;
     RAII_LOCK_ACQUIRED(pCtx->mtx);
-    for (auto it = pCtx->vecTickCtxs.begin(); it != pCtx->vecTickCtxs.end(); ) {
+    for (auto it = pCtx->liTickCtxs.begin(); it != pCtx->liTickCtxs.end(); ) {
         if (it->pfnOnTick(it->pObj, usNow))
             ++it;
         else
-            it = pCtx->vecTickCtxs.erase(it);
+            it = pCtx->liTickCtxs.erase(it);
     }
 }
 

@@ -87,6 +87,10 @@ USize GetProcessors() noexcept;
 
 U64 GetTimeStamp() noexcept;
 
+constexpr U64 StampInfinite(U64 usNow) noexcept {
+    return usNow + 0x8000000000000000ULL;
+}
+
 constexpr bool StampBefore(U64 usSub, U64 usObj) noexcept {
     return static_cast<I64>(usSub - usObj) < 0;
 }

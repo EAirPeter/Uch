@@ -35,15 +35,15 @@ public:
     template<class tObj>
     void RegisterTick(tObj &vObj) noexcept {
         RAII_LOCK(x_vTimerCtx.mtx);
-        x_vTimerCtx.vecTickCtxs.emplace_back(X_FwdOnTick<tObj>, &vObj);
+        x_vTimerCtx.liTickCtxs.emplace_back(X_FwdOnTick<tObj>, &vObj);
     }
 
     template<class tObj>
     void UnregisterTick(tObj &vObj) noexcept {
         RAII_LOCK(x_vTimerCtx.mtx);
-        auto it = std::find(x_vTimerCtx.vecTickCtxs.begin(), x_vTimerCtx.vecTickCtxs.end(), &vObj);
-        if (it != x_vTimerCtx.vecTickCtxs.end())
-            x_vTimerCtx.vecTickCtxs.erase(it);
+        auto it = std::find(x_vTimerCtx.liTickCtxs.begin(), x_vTimerCtx.liTickCtxs.end(), &vObj);
+        if (it != x_vTimerCtx.liTickCtxs.end())
+            x_vTimerCtx.liTickCtxs.erase(it);
     }
 
     template<class tObj>
@@ -113,7 +113,7 @@ private:
     struct X_TpTimerContext {
         PTP_TIMER pTpTimer = nullptr;
         RecursiveMutex mtx;
-        std::vector<X_TickContext> vecTickCtxs;
+        std::list<X_TickContext> liTickCtxs;
     } x_vTimerCtx {};
 
 private:
