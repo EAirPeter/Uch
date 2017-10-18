@@ -3,6 +3,8 @@
 #include "ByteChunk.hpp"
 #include "IoGroup.hpp"
 
+#include "Debug.hpp"
+
 void IoGroup::Start() {
     if (x_pTpPool)
         throw ExnIllegalState {};
@@ -10,6 +12,7 @@ void IoGroup::Start() {
     if (!x_pTpPool)
         throw ExnSys();
     SetThreadpoolThreadMaximum(x_pTpPool, x_dwThreads);
+    SetThreadpoolThreadMinimum(x_pTpPool, x_dwThreads);
     SetThreadpoolCallbackPool(&x_vTpCbEnv, x_pTpPool);
     if (x_dwTickMilli) {
         x_vTimerCtx.pTpTimer = CreateThreadpoolTimer(X_TpcbOnTimer, &x_vTimerCtx, &x_vTpCbEnv);
@@ -74,8 +77,10 @@ VOID IoGroup::X_TpcbOnTimer(
     UNREFERENCED_PARAMETER(pTpTimer);
     auto pCtx = reinterpret_cast<X_TpTimerContext *>(pParam);
     auto usNow = GetTimeStamp();
-    if (!pCtx->mtx.TryAcquire()) // lag
+    if (!pCtx->mtx.TryAcquire()) {// lag
+        DBG_PRINTLN("lag");
         return;
+    }
     RAII_LOCK_ACQUIRED(pCtx->mtx);
     for (auto it = pCtx->liTickCtxs.begin(); it != pCtx->liTickCtxs.end(); ) {
         if (it->pfnOnTick(it->pObj, usNow))

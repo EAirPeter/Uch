@@ -28,6 +28,14 @@ SOCKET CreateUdpSocket() {
     return sock;
 }
 
+HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags) {
+    auto hFile = CreateFileW(
+        sPath.c_str(), dwAccess, 0, nullptr, dwCreation, dwFlags | FILE_FLAG_OVERLAPPED, nullptr
+    );
+    if (hFile == INVALID_HANDLE_VALUE)
+        throw ExnSys();
+    return hFile;
+}
 thread_local char g_szUtf8Buf[STRCVT_BUFSIZE];
 thread_local wchar_t g_szWideBuf[STRCVT_BUFSIZE];
 

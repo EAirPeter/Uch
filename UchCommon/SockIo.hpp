@@ -111,7 +111,7 @@ public:
         upChunk->pfnIoCallback = X_FwdOnSend;
         RAII_LOCK(x_mtx);
         if (!x_pIoGroup || x_bStopping)
-            throw ExnIllegalState();
+            throw ExnIllegalState {};
         auto pChunk = upChunk.release();
         StartThreadpoolIo(x_pTpIo);
         auto nRes = WSASend(x_hSocket, &vWsaBuf, 1, nullptr, 0, pChunk, nullptr);
@@ -169,10 +169,10 @@ private:
 private:
     inline void X_IocbOnRecv(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
         if (dwRes)
-            x_vUpper.OnRead(dwRes, 0, std::move(pChunk));
+            x_vUpper.OnRead(dwRes, 0, pChunk);
         else {
             pChunk->Skip(uDone);
-            x_vUpper.OnRead(0, uDone, std::move(pChunk));
+            x_vUpper.OnRead(0, uDone, pChunk);
         }
         RAII_LOCK(x_mtx);
         X_EndRecv();
@@ -205,7 +205,6 @@ private:
     Upper &x_vUpper;
 
     RecursiveMutex x_mtx;
-    Mutex x_mtxCore;
     bool x_bStopping = false;
     bool x_bFinalized = false;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#ifndef NDEBUG
+#ifdef NDEBUG
 
 #include "Common.hpp"
 
@@ -29,28 +29,28 @@ namespace ImplDbg {
 
     template<class tFirst, class ...tvArgs>
     inline void X_Println(tFirst &&vFirst, tvArgs &&...vArgs) noexcept {
-        wcout << forward<tFirst>(vFirst);
-        X_Println(forward<tvArgs>(vArgs)...);
+        std::wcout << std::forward<tFirst>(vFirst);
+        X_Println(std::forward<tvArgs>(vArgs)...);
     }
 
     template<class ...tvArgs>
     inline void Println(tvArgs &&...vArgs) noexcept {
         RAII_LOCK(mtxConsole);
-        X_Println(forward<tvArgs>(vArgs)...);
+        X_Println(std::forward<tvArgs>(vArgs)...);
     }
 
     inline void X_Scan() noexcept {}
 
     template<class tFirst, class ...tvArgs>
     inline void X_Scan(tFirst &&vFirst, tvArgs &&...vArgs) noexcept {
-        wcin >> forward<tFirst>(vFirst);
-        X_Scan(forward<tvArgs>(vArgs)...);
+        std::wcin >> std::forward<tFirst>(vFirst);
+        X_Scan(std::forward<tvArgs>(vArgs)...);
     }
 
     template<class ...tvArgs>
     inline void Scan(tvArgs &&...vArgs) noexcept {
         RAII_LOCK(mtxConsole);
-        X_Scan(forward<tvArgs>(vArgs)...);
+        X_Scan(std::forward<tvArgs>(vArgs)...);
     }
 
 }

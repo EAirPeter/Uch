@@ -12,7 +12,7 @@ public:
     IoGroup &operator =(const IoGroup &) = delete;
     IoGroup &operator =(IoGroup &&) = delete;
 
-    inline IoGroup(DWORD dwTickMilli = 10, DWORD dwThreads = GetProcessors() * 2) :
+    inline IoGroup(DWORD dwTickMilli = 10, DWORD dwThreads = GetProcessors()) :
         x_dwThreads(dwThreads), x_dwTickMilli(dwTickMilli)
     {
         InitializeThreadpoolEnvironment(&x_vTpCbEnv);

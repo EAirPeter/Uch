@@ -112,10 +112,14 @@ namespace ImplUcp {
 
     };
 
+#if 0
 #   define UCP_DBGOUT(...) DBG_PRINTLN( \
         L"[Ucp ", std::setw(4), std::setfill(L'0'), std::hex, std::uppercase, ((UPtr) this & 0xffff), \
         L"][", std::setw(18), std::setfill(L' '), __func__, "] ", std::dec, __VA_ARGS__ \
     )
+#else
+#   define UCP_DBGOUT(...) ((void) 0)
+#endif
 
     template<class tUpper, Byte kbyPakIds>
     class Ucp {
@@ -212,7 +216,7 @@ namespace ImplUcp {
                 return false;
             }
             x_usNow = usNow;
-            if (x_bDirty || x_bNeedAck || StampDue(x_usNow, x_usTimeout)) {
+            if (x_bDirty || x_bEchoed || StampDue(x_usNow, x_usTimeout)) {
                 try {
                     X_Flush();
                 }
@@ -382,7 +386,7 @@ namespace ImplUcp {
                 x_utRttVar = (x_utRttVar * 3 + uTmp) >> 2;
                 x_utSRtt = (x_utSRtt * 7 + utRtt) >> 3;
             }
-            x_utRto = x_utSRtt + std::max(x_kutTick, x_utRttVar << 2);
+            x_utRto = std::max(x_utSRtt + std::max(x_kutTick, x_utRttVar << 2), x_kutRtoMin);
             UCP_DBGOUT("srtt = ", x_utSRtt, ", rttvar = ", x_utRttVar, ", rto = ", x_utRto);
         }
 
@@ -459,12 +463,12 @@ namespace ImplUcp {
                     else if (++pSeg->ucTimedOut > x_kucConnLost)
                         throw ExnIllegalState {};
                     X_EncodeSegment(pSeg);
-                }
+                }/*
                 else if (pSeg->ucSkipped >= x_kucFastResend) {
                     // fast resend
                     bFastResend = true;
                     X_EncodeSegment(pSeg);
-                }
+                }*/
                 if (StampBefore(pSeg->usTimeout, x_usTimeout))
                     x_usTimeout = pSeg->usTimeout;
             }
@@ -478,11 +482,11 @@ namespace ImplUcp {
             if (bTimedOut) {
                 x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd >> 1);
                 x_uzCwnd = x_kuzCwndMin;
-            }
+            }/*
             else if (bFastResend) {
                 x_uzSsthresh = std::max(x_kuzSsthreshMin, (x_unSndSeq - x_unSndAck) >> 1);
                 x_uzCwnd = x_uzSsthresh + x_kucFastResend * kuMss;
-            }
+            }*/
             UCP_DBGOUT(
                 "ssthresh = ", x_uzSsthresh, ", cwnd = ", x_uzCwnd,
                 ", now = ", x_usNow, ", next_timeout = ", x_usTimeout

@@ -102,6 +102,8 @@ constexpr bool StampDue(U64 usNow, U64 usDue) noexcept {
 SOCKET CreateTcpSocket();
 SOCKET CreateUdpSocket();
 
+HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags);
+
 constexpr static USize STRCVT_BUFSIZE = 65536;
 
 extern thread_local char g_szUtf8Buf[STRCVT_BUFSIZE];
