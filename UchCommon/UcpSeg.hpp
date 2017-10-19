@@ -32,10 +32,9 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuMss = 1400;
+    constexpr static U32 kuMss = 65000;
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
-    constexpr static U32 kuMks = kuMps * 256;
 
     struct SegHdr {
         constexpr SegHdr() noexcept = default;
@@ -51,10 +50,10 @@ namespace ImplUcp {
             pChunk->Read(&unAck, 3);
             pChunk->Read(&ucRwnd, 2);
             U32 uTmp = 0;
-            pChunk->Read(&uTmp, 3);
+            pChunk->Read(&uTmp, 4);
             ucSaks = uTmp & 0x00000fff;
-            uzData = uTmp >> 12;
-            pChunk->Read(&ucFrag, 1);
+            uzData = uTmp >> 12 & 0x0000ffff;
+            ucFrag = uTmp >> 28;
         }
 
         U32 unSeq = 0;  // 24-bit sequence number
@@ -70,14 +69,13 @@ namespace ImplUcp {
             assert(!(unAck & 0xff000000));
             assert(!(ucRwnd & 0xffff0000));
             assert(!(ucSaks & 0xfffff000));
-            assert(!(uzData & 0xfffff000));
-            assert(!(ucFrag & 0xffffff00));
+            assert(!(uzData & 0xffff0000));
+            assert(!(ucFrag & 0xfffffff0));
             pChunk->Write(&unSeq, 3);
             pChunk->Write(&unAck, 3);
             pChunk->Write(&ucRwnd, 2);
-            U32 uTmp = uzData << 12 | ucSaks;
-            pChunk->Write(&uTmp, 3);
-            pChunk->Write(&ucFrag, 1);
+            U32 uTmp = ucFrag << 28 | uzData << 12 | ucSaks;
+            pChunk->Write(&uTmp, 4);
         }
 
     };
