@@ -4,10 +4,8 @@
 
 #include "IntrList.hpp"
 
-class ByteChunk;
-
 struct ChunkIoContext : public OVERLAPPED {
-    void (*pfnIoCallback)(void *pParam, DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept;
+    void (*pfnIoCallback)(void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx) noexcept;
 };
 
 // Implemented only low level operations.
@@ -17,7 +15,7 @@ private:
     constexpr static USize x_kuAlignUnit = alignof(Byte *);
 
 public:
-    static inline std::unique_ptr<ByteChunk> MakeUnique(USize uCapacity, USize uAlign = x_kuAlignUnit) noexcept {
+    static inline std::unique_ptr<ByteChunk> MakeUnique(U32 uCapacity, USize uAlign = x_kuAlignUnit) noexcept {
         assert(!(uAlign & (uAlign - 1)));
         assert(uAlign >= x_kuAlignUnit);
         assert(uCapacity);
@@ -48,16 +46,16 @@ private:
     ByteChunk &operator =(ByteChunk &&) = delete;
 
 public:
-    constexpr USize GetCapacity() const noexcept {
-        return static_cast<USize>(x_pEnd - GetData());
+    constexpr U32 GetCapacity() const noexcept {
+        return static_cast<U32>(x_pEnd - GetData());
     }
 
-    constexpr USize GetReaderIdx() const noexcept {
-        return static_cast<USize>(x_pReader - GetData());
+    constexpr U32 GetReaderIdx() const noexcept {
+        return static_cast<U32>(x_pReader - GetData());
     }
 
-    constexpr USize GetWriterIdx() const noexcept {
-        return static_cast<USize>(x_pWriter - GetData());
+    constexpr U32 GetWriterIdx() const noexcept {
+        return static_cast<U32>(x_pWriter - GetData());
     }
 
     constexpr bool IsPrependable() const noexcept {
@@ -72,16 +70,16 @@ public:
         return x_pWriter != x_pEnd;
     }
 
-    constexpr USize GetPrependable() const noexcept {
-        return static_cast<USize>(x_pReader - GetData());
+    constexpr U32 GetPrependable() const noexcept {
+        return static_cast<U32>(x_pReader - GetData());
     }
 
-    constexpr USize GetReadable() const noexcept {
-        return static_cast<USize>(x_pWriter - x_pReader);
+    constexpr U32 GetReadable() const noexcept {
+        return static_cast<U32>(x_pWriter - x_pReader);
     }
     
-    constexpr USize GetWritable() const noexcept {
-        return static_cast<USize>(x_pEnd - x_pWriter);
+    constexpr U32 GetWritable() const noexcept {
+        return static_cast<U32>(x_pEnd - x_pWriter);
     }
 
     constexpr Byte *GetData() noexcept {
@@ -114,7 +112,7 @@ public:
         x_pWriter = GetData();
     }
 
-    constexpr void ToIdx(USize uIdx) noexcept {
+    constexpr void ToIdx(U32 uIdx) noexcept {
         x_pReader = GetData() + uIdx;
         x_pWriter = GetData() + uIdx;
     }
@@ -124,45 +122,45 @@ public:
         x_pWriter = x_pEnd;
     }
 
-    constexpr void Discard(USize uSize) noexcept {
+    constexpr void Discard(U32 uSize) noexcept {
         x_pReader += uSize;
     }
 
-    constexpr void Skip(USize uSize) noexcept {
+    constexpr void Skip(U32 uSize) noexcept {
         x_pWriter += uSize;
     }
 
-    inline void Prepend(const void *pData, USize uSize) noexcept {
+    inline void Prepend(const void *pData, U32 uSize) noexcept {
         x_pReader -= uSize;
         std::memcpy(x_pReader, pData, uSize);
     }
 
-    inline void Peek(void *pData, USize uSize) const noexcept {
+    inline void Peek(void *pData, U32 uSize) const noexcept {
         std::memcpy(pData, x_pReader, uSize);
     }
 
-    inline void Read(void *pData, USize uSize) noexcept {
+    inline void Read(void *pData, U32 uSize) noexcept {
         std::memcpy(pData, x_pReader, uSize);
         x_pReader += uSize;
     }
 
-    inline void Write(const void *pData, USize uSize) noexcept {
+    inline void Write(const void *pData, U32 uSize) noexcept {
         std::memcpy(x_pWriter, pData, uSize);
         x_pWriter += uSize;
     }
 
-    inline void Fill(Byte byVal, USize uSize) noexcept {
+    inline void Fill(Byte byVal, U32 uSize) noexcept {
         std::memset(x_pWriter, static_cast<int>(byVal), uSize);
         x_pWriter += uSize;
     }
 
-    inline void Suck(ByteChunk &vChunk, USize uSize) noexcept {
+    inline void Suck(ByteChunk &vChunk, U32 uSize) noexcept {
         x_pReader -= uSize;
         vChunk.x_pWriter -= uSize;
         std::memcpy(x_pReader, vChunk.x_pWriter, uSize);
     }
 
-    inline void Transfer(ByteChunk &vChunk, USize uSize) noexcept {
+    inline void Transfer(ByteChunk &vChunk, U32 uSize) noexcept {
         std::memcpy(x_pWriter, vChunk.x_pReader, uSize);
         x_pWriter += uSize;
         vChunk.x_pReader += uSize;

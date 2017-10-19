@@ -3,7 +3,7 @@
 #include "ByteBuffer.hpp"
 
 // uSize > 0
-inline ByteChunk *ByteBuffer::X_Reserve(USize uSize) noexcept {
+inline ByteChunk *ByteBuffer::X_Reserve(U32 uSize) noexcept {
     auto pChunk = x_liChunks.GetTail();
     if (pChunk == x_liChunks.GetNil() || !pChunk->IsWritable()) {
         x_liChunks.PushTail(X_MakeChunk(uSize));
@@ -18,7 +18,7 @@ inline ByteChunk *ByteBuffer::X_Reserve(USize uSize) noexcept {
 }
 
 // uSize > 0, uSize <= x_uSize
-inline void ByteBuffer::X_DiscardUnsafe(USize uSize) noexcept {
+inline void ByteBuffer::X_DiscardUnsafe(U32 uSize) noexcept {
     x_uSize -= uSize;
     for (;;) {
         auto pChunk = x_liChunks.GetHead();
@@ -37,7 +37,7 @@ inline void ByteBuffer::X_DiscardUnsafe(USize uSize) noexcept {
 }
 
 // uSize > 0, uSize <= x_uSize
-inline void ByteBuffer::X_PeekUnsafe(void *pData, USize uSize) const noexcept {
+inline void ByteBuffer::X_PeekUnsafe(void *pData, U32 uSize) const noexcept {
     auto pDst = reinterpret_cast<Byte *>(pData);
     auto pChunk = x_liChunks.GetHead();
     for (;;) {
@@ -53,7 +53,7 @@ inline void ByteBuffer::X_PeekUnsafe(void *pData, USize uSize) const noexcept {
 }
 
 // uSize > 0, uSize <= x_uSize
-inline void ByteBuffer::X_ReadUnsafe(void *pData, USize uSize) noexcept {
+inline void ByteBuffer::X_ReadUnsafe(void *pData, U32 uSize) noexcept {
     x_uSize -= uSize;
     auto pDst = reinterpret_cast<Byte *>(pData);
     for (;;) {
@@ -74,7 +74,7 @@ inline void ByteBuffer::X_ReadUnsafe(void *pData, USize uSize) noexcept {
 }
 
 // uSize > 0, X_Reserve() invoked
-inline void ByteBuffer::X_WriteUnsafe(ByteChunk *&pChunk, const void *pData, USize uSize) noexcept {
+inline void ByteBuffer::X_WriteUnsafe(ByteChunk *&pChunk, const void *pData, U32 uSize) noexcept {
     x_uSize += uSize;
     auto pSrc = reinterpret_cast<const Byte *>(pData);
     for (;;) {
@@ -90,10 +90,10 @@ inline void ByteBuffer::X_WriteUnsafe(ByteChunk *&pChunk, const void *pData, USi
 }
 
 // uSize > 0, uSize <= x_uSize
-inline ByteBuffer ByteBuffer::X_ExtractUnsafe(USize uSize) noexcept {
+inline ByteBuffer ByteBuffer::X_ExtractUnsafe(U32 uSize) noexcept {
     x_uSize -= uSize;
     auto pTail = x_liChunks.GetHead();
-    USize uAcc = 0;
+    U32 uAcc = 0;
     for (;;) {
         uAcc += pTail->GetReadable();
         if (uAcc >= uSize)
@@ -119,7 +119,7 @@ inline ByteBuffer ByteBuffer::X_ExtractUnsafe(USize uSize) noexcept {
     return {uSize, std::move(vList)};
 }
 
-void ByteBuffer::Discard(USize uSize) {
+void ByteBuffer::Discard(U32 uSize) {
     if (!uSize)
         return;
     if (x_uSize < uSize)
@@ -127,7 +127,7 @@ void ByteBuffer::Discard(USize uSize) {
     X_DiscardUnsafe(uSize);
 }
 
-void ByteBuffer::PeekBytes(void *pData, USize uSize) const {
+void ByteBuffer::PeekBytes(void *pData, U32 uSize) const {
     if (!uSize)
         return;
     if (x_uSize < uSize)
@@ -135,7 +135,7 @@ void ByteBuffer::PeekBytes(void *pData, USize uSize) const {
     X_PeekUnsafe(pData, uSize);
 }
 
-void ByteBuffer::ReadBytes(void *pData, USize uSize) {
+void ByteBuffer::ReadBytes(void *pData, U32 uSize) {
     if (!uSize)
         return;
     if (x_uSize < uSize)
@@ -143,7 +143,7 @@ void ByteBuffer::ReadBytes(void *pData, USize uSize) {
     X_ReadUnsafe(pData, uSize);
 }
 
-void ByteBuffer::WriteBytes(const void *pData, USize uSize) noexcept {
+void ByteBuffer::WriteBytes(const void *pData, U32 uSize) noexcept {
     if (!uSize)
         return;
     auto pChunk = X_Reserve(uSize);
@@ -151,25 +151,25 @@ void ByteBuffer::WriteBytes(const void *pData, USize uSize) noexcept {
 }
 
 #ifdef BYTEBUFFER_NEED_AS_MUCH
-USize ByteBuffer::DiscardAsMuch(USize uSize) noexcept {
+U32 ByteBuffer::DiscardAsMuch(U32 uSize) noexcept {
     uSize = std::min(uSize, x_uSize);
     X_DiscardUnsafe(uSize);
     return uSize;
 }
 
-USize ByteBuffer::PeekAsMuch(void *pData, USize uSize) const noexcept {
+U32 ByteBuffer::PeekAsMuch(void *pData, U32 uSize) const noexcept {
     uSize = std::min(uSize, x_uSize);
     X_PeekUnsafe(pData, uSize);
     return uSize;
 }
 
-USize ByteBuffer::ReadAsMuch(void *pData, USize uSize) noexcept {
+U32 ByteBuffer::ReadAsMuch(void *pData, U32 uSize) noexcept {
     uSize = std::min(uSize, x_uSize);
     X_ReadUnsafe(pData, uSize);
     return uSize;
 }
 
-USize ByteBuffer::WriteAsMuch(const void *pData, USize uSize) noexcept {
+U32 ByteBuffer::WriteAsMuch(const void *pData, U32 uSize) noexcept {
     X_Reserve(uSize);
     X_WriteUnsafe(pData, uSize);
     return uSize;
@@ -189,7 +189,7 @@ void ByteBuffer::Append(const ByteBuffer &vBuf) noexcept {
         X_WriteUnsafe(pChunk, pOther->GetReader(), pOther->GetReadable());
 }
 
-ByteBuffer ByteBuffer::Extract(USize uSize) {
+ByteBuffer ByteBuffer::Extract(U32 uSize) {
     if (!uSize)
         return {};
     if (x_uSize < uSize)
@@ -198,14 +198,14 @@ ByteBuffer ByteBuffer::Extract(USize uSize) {
 }
 
 #ifdef BYTEBUFFER_NEED_AS_MUCH
-ByteBuffer ByteBuffer::ExtractAsMuch(USize uSize) noexcept {
+ByteBuffer ByteBuffer::ExtractAsMuch(U32 uSize) noexcept {
     uSize = std::min(uSize, x_uSize);
     return X_ExtractUnsafe(uSize);
 }
 #endif
 
 String ByteBuffer::ReadUtf8() {
-    auto uLen = static_cast<USize>(Peek<U16>());
+    auto uLen = static_cast<U32>(Peek<U16>());
     if (!uLen) {
         X_DiscardUnsafe(sizeof(U16));
         return {};

@@ -1,6 +1,7 @@
-#pragma once
+#ifndef NDEBUG
 
-#ifdef NDEBUG
+#ifndef UCH_DEBUG_HPP_
+#define UCH_DEBUG_HPP_
 
 #include "Common.hpp"
 
@@ -55,10 +56,18 @@ namespace ImplDbg {
 
 }
 
+#ifdef DBG_PRINTLN
+#   undef DBG_PRINTLN
+#endif
+
 #define DBG_PRINTLN(...) ImplDbg::Println(__VA_ARGS__)
+
+#endif
 
 #else
 
-#define DBG_PRINTLN(...) ((void) 0)
+#ifndef DBG_PRINTLN
+#   define DBG_PRINTLN(...) ((void) 0)
+#endif
 
 #endif

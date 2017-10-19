@@ -58,7 +58,7 @@ public:
         x_vUpper.OnFinalize();
     }
 
-    void OnRead(DWORD dwError, USize uDone, ByteChunk *pChunk) noexcept {
+    void OnRead(DWORD dwError, U32 uDone, ByteChunk *pChunk) noexcept {
         RAII_LOCK(x_mtx);
         if (dwError) {
             x_vRecvBuf.EndRecv(0, pChunk);
@@ -89,7 +89,7 @@ public:
         X_PostRead();
     }
 
-    inline void OnWrite(DWORD dwError, USize uDone, std::unique_ptr<ByteChunk> upChunk) {
+    inline void OnWrite(DWORD dwError, U32 uDone, std::unique_ptr<ByteChunk> upChunk) {
         UNREFERENCED_PARAMETER(uDone);
         UNREFERENCED_PARAMETER(upChunk);
         RAII_LOCK(x_mtx);
@@ -104,7 +104,7 @@ public:
             while (!vPakBuf.IsEmpty())
                 x_vLower.Write(vPakBuf.PopChunk());
         }
-        catch (ExnSockWrite &e) {
+        catch (ExnSockWrite<ByteChunk> &e) {
             X_OnError(e.nError);
         }
     }
@@ -125,7 +125,7 @@ private:
         try {
             x_vLower.PostRead(pChunk);
         }
-        catch (ExnSockRead &e) {
+        catch (ExnSockRead<ByteChunk> &e) {
             x_vRecvBuf.EndRecv(0, pChunk);
             X_OnError(e.nError);
         }

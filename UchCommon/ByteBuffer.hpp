@@ -7,7 +7,7 @@
 
 class ByteBuffer {
 private:
-    constexpr static USize kuChunkSize = 16;
+    constexpr static U32 kuChunkSize = 16;
 
 public:
     ByteBuffer() noexcept = default;
@@ -24,7 +24,7 @@ public:
         PushChunk(std::move(upChunk));
     }
 
-    inline ByteBuffer(const void *pData, USize uSize) {
+    inline ByteBuffer(const void *pData, U32 uSize) {
         WriteBytes(pData, uSize);
     }
 
@@ -53,7 +53,7 @@ public:
         return !x_uSize;
     }
 
-    constexpr USize GetSize() const noexcept {
+    constexpr U32 GetSize() const noexcept {
         return x_uSize;
     }
 
@@ -63,23 +63,23 @@ public:
     }
 
 private:
-    inline ByteChunk *X_Reserve(USize uSize) noexcept;
-    inline void X_DiscardUnsafe(USize uSize) noexcept;
-    inline void X_PeekUnsafe(void *pData, USize uSize) const noexcept;
-    inline void X_ReadUnsafe(void *pData, USize uSize) noexcept;
-    inline void X_WriteUnsafe(ByteChunk *&pChunk, const void *pData, USize uSize) noexcept;
-    inline ByteBuffer X_ExtractUnsafe(USize uSize) noexcept;
+    inline ByteChunk *X_Reserve(U32 uSize) noexcept;
+    inline void X_DiscardUnsafe(U32 uSize) noexcept;
+    inline void X_PeekUnsafe(void *pData, U32 uSize) const noexcept;
+    inline void X_ReadUnsafe(void *pData, U32 uSize) noexcept;
+    inline void X_WriteUnsafe(ByteChunk *&pChunk, const void *pData, U32 uSize) noexcept;
+    inline ByteBuffer X_ExtractUnsafe(U32 uSize) noexcept;
 
 public:
-    void Discard(USize uSize);
-    void PeekBytes(void *pData, USize uSize) const;
-    void ReadBytes(void *pData, USize uSize);
-    void WriteBytes(const void *pData, USize uSize) noexcept;
+    void Discard(U32 uSize);
+    void PeekBytes(void *pData, U32 uSize) const;
+    void ReadBytes(void *pData, U32 uSize);
+    void WriteBytes(const void *pData, U32 uSize) noexcept;
 #ifdef BYTEBUFFER_NEED_AS_MUCH
-    USize DiscardAsMuch(USize uSize) noexcept;
-    USize PeekAsMuch(void *pData, USize uSize) const noexcept;
-    USize ReadAsMuch(void *pData, USize uSize) noexcept;
-    USize WriteAsMuch(const void *pData, USize uSize) noexcept;
+    U32 DiscardAsMuch(U32 uSize) noexcept;
+    U32 PeekAsMuch(void *pData, U32 uSize) const noexcept;
+    U32 ReadAsMuch(void *pData, U32 uSize) noexcept;
+    U32 WriteAsMuch(const void *pData, U32 uSize) noexcept;
 #endif
 
 public:
@@ -89,9 +89,9 @@ public:
 
     void Splice(ByteBuffer &vBuf) noexcept;
     void Append(const ByteBuffer &vBuf) noexcept;
-    ByteBuffer Extract(USize uSize);
+    ByteBuffer Extract(U32 uSize);
 #ifdef BYTEBUFFER_NEED_AS_MUCH
-    ByteBuffer ExtractAsMuch(USize uSize) noexcept;
+    ByteBuffer ExtractAsMuch(U32 uSize) noexcept;
 #endif
 
 public:
@@ -126,7 +126,7 @@ public:
         auto uSize = static_cast<U16>(uSize_);
         if (uSize != uSize_)
             throw ExnArgTooLarge {uSize_, 65535};
-        auto uSzHdr = sizeof(U16) + sizeof(U16);
+        auto uSzHdr = static_cast<U32>(sizeof(U16) + sizeof(U16));
         x_uSize += uSzHdr;
         auto pHead = x_liChunks.GetHead();
         if (pHead == x_liChunks.GetNil() || pHead->GetPrependable() < uSzHdr) {
@@ -142,14 +142,14 @@ public:
         }
     }
 
-    inline ByteChunk *BeginRecv(USize uSize) noexcept {
+    inline ByteChunk *BeginRecv(U32 uSize) noexcept {
         auto pTail = x_liChunks.GetTail();
         if (pTail == x_liChunks.GetNil() || !pTail->IsWritable())
             return X_MakeChunk(uSize).release();
         return pTail;
     }
 
-    inline void EndRecv(USize uSize, ByteChunk *pChunk) noexcept {
+    inline void EndRecv(U32 uSize, ByteChunk *pChunk) noexcept {
         if (uSize) {
             x_uSize += uSize;
             if (pChunk != x_liChunks.GetTail())
@@ -173,14 +173,14 @@ public:
     }
 
 private:
-    constexpr ByteBuffer(USize uSize, IntrList<ByteChunk> &&vList) : x_uSize(uSize), x_liChunks(std::move(vList)) {}
+    constexpr ByteBuffer(U32 uSize, IntrList<ByteChunk> &&vList) : x_uSize(uSize), x_liChunks(std::move(vList)) {}
 
-    static inline std::unique_ptr<ByteChunk> X_MakeChunk(USize uSize) {
+    static inline std::unique_ptr<ByteChunk> X_MakeChunk(U32 uSize) {
         return ByteChunk::MakeUnique(uSize | kuChunkSize);
     }
 
 private:
-    USize x_uSize = 0;
+    U32 x_uSize = 0;
     IntrList<ByteChunk> x_liChunks;
 
 };

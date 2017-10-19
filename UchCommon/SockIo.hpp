@@ -7,14 +7,16 @@
 #include "SockName.hpp"
 #include "Sync.hpp"
 
+template<class tChunk>
 struct ExnSockRead {
     int nError;
-    ByteChunk *pChunk;
+    tChunk *pChunk;
 };
 
+template<class tChunk>
 struct ExnSockWrite {
     int nError;
-    std::unique_ptr<ByteChunk> upChunk;
+    std::unique_ptr<tChunk> upChunk;
 };
 
 template<class tUpper>
@@ -80,12 +82,13 @@ public:
         X_Close();
     }
 
-    inline void PostRead(ByteChunk *pChunk) {
+    template<class tChunk>
+    inline void PostRead(tChunk *pChunk) {
         WSABUF vWsaBuf {
             static_cast<ULONG>(pChunk->GetWritable()),
             reinterpret_cast<char *>(pChunk->GetWriter())
         };
-        pChunk->pfnIoCallback = X_FwdOnRecv;
+        pChunk->pfnIoCallback = X_FwdOnRecv<tChunk>;
         RAII_LOCK(x_mtx);
         if (!x_pIoGroup || x_bStopping)
             throw ExnIllegalState {};
@@ -98,17 +101,18 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndRecv();
-                throw ExnSockRead {nRes, pChunk};
+                throw ExnSockRead<tChunk> {nRes, pChunk};
             }
         }
     }
 
-    inline void Write(std::unique_ptr<ByteChunk> upChunk) {
+    template<class tChunk>
+    inline void Write(std::unique_ptr<tChunk> upChunk) {
         WSABUF vWsaBuf {
             static_cast<ULONG>(upChunk->GetReadable()),
             reinterpret_cast<char *>(upChunk->GetReader())
         };
-        upChunk->pfnIoCallback = X_FwdOnSend;
+        upChunk->pfnIoCallback = X_FwdOnSend<tChunk>;
         RAII_LOCK(x_mtx);
         if (!x_pIoGroup || x_bStopping)
             throw ExnIllegalState {};
@@ -121,7 +125,7 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndSend();
-                throw ExnSockWrite {nRes, std::unique_ptr<ByteChunk>(pChunk)};
+                throw ExnSockWrite<tChunk> {nRes, std::unique_ptr<tChunk>(pChunk)};
             }
         }
     }
@@ -167,7 +171,8 @@ private:
     }
 
 private:
-    inline void X_IocbOnRecv(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
+    template<class tChunk>
+    inline void X_IocbOnRecv(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
             x_vUpper.OnRead(dwRes, 0, pChunk);
         else {
@@ -178,27 +183,30 @@ private:
         X_EndRecv();
     }
 
-    inline void X_IocbOnSend(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
+    template<class tChunk>
+    inline void X_IocbOnSend(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
-            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<ByteChunk>(pChunk));
+            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<tChunk>(pChunk));
         else {
             pChunk->Discard(uDone);
-            x_vUpper.OnWrite(0, uDone, std::unique_ptr<ByteChunk>(pChunk));
+            x_vUpper.OnWrite(0, uDone, std::unique_ptr<tChunk>(pChunk));
         }
         RAII_LOCK(x_mtx);
         X_EndSend();
     }
 
+    template<class tChunk>
     static void X_FwdOnRecv(
-        void *pParam, DWORD dwRes, USize uDone, ByteChunk *pChunk
+        void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
     ) noexcept {
-        reinterpret_cast<SockIo *>(pParam)->X_IocbOnRecv(dwRes, uDone, pChunk);
+        reinterpret_cast<SockIo *>(pParam)->X_IocbOnRecv(dwRes, uDone, static_cast<tChunk *>(pCtx));
     }
 
+    template<class tChunk>
     static void X_FwdOnSend(
-        void *pParam, DWORD dwRes, USize uDone, ByteChunk *pChunk
+        void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
     ) noexcept {
-        reinterpret_cast<SockIo *>(pParam)->X_IocbOnSend(dwRes, uDone, pChunk);
+        reinterpret_cast<SockIo *>(pParam)->X_IocbOnSend(dwRes, uDone, static_cast<tChunk *>(pCtx));
     }
 
 private:
@@ -211,8 +219,8 @@ private:
     IoGroup *x_pIoGroup = nullptr;
     PTP_IO x_pTpIo = nullptr;
 
-    USize x_uSend = 0;
-    USize x_uRecv = 0;
+    U32 x_uSend = 0;
+    U32 x_uRecv = 0;
     
     SOCKET x_hSocket;
     SockName x_vSnLocal;

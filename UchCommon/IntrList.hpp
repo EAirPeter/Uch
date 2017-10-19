@@ -129,8 +129,8 @@ public:
         return X_Head() == X_Nil();
     }
 
-    constexpr USize GetSize() const noexcept {
-        USize uRes = 0;
+    constexpr U32 GetSize() const noexcept {
+        U32 uRes = 0;
         for (auto pNode = X_Head(); pNode != X_Nil(); pNode = pNode->x_pNext)
             ++uRes;
         return uRes;

@@ -141,6 +141,7 @@
     <ClInclude Include="IoGroup.hpp" />
     <ClInclude Include="IntrList.hpp" />
     <ClInclude Include="Listener.hpp" />
+    <ClInclude Include="Pool.hpp" />
     <ClInclude Include="Sync.hpp" />
     <ClInclude Include="Pipeline.hpp" />
     <ClInclude Include="SockIo.hpp" />
@@ -148,6 +149,7 @@
     <ClInclude Include="StaticChunk.hpp" />
     <ClInclude Include="TestCommon.hpp" />
     <ClInclude Include="Debug.hpp" />
+    <ClInclude Include="UcpSeg.hpp" />
     <ClInclude Include="Uftp.hpp" />
     <ClInclude Include="Ucp.hpp" />
   </ItemGroup>

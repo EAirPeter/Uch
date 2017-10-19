@@ -5,14 +5,16 @@
 #include "ByteChunk.hpp"
 #include "IoGroup.hpp"
 
+template<class tChunk>
 struct ExnFileRead {
     DWORD dwError;
-    ByteChunk *pChunk;
+    tChunk *pChunk;
 };
 
+template<class tChunk>
 struct ExnFileWrite {
     DWORD dwError;
-    std::unique_ptr<ByteChunk> upChunk;
+    std::unique_ptr<tChunk> upChunk;
 };
 
 template<class tUpper>
@@ -31,7 +33,6 @@ public:
     FileIo(FileIo &&) = delete;
 
     ~FileIo() {
-        RAII_LOCK(x_mtx);
         X_CloseFile();
     }
 
@@ -53,160 +54,145 @@ public:
 
 public:
     inline void AssignToIoGroup(IoGroup &vIoGroup) {
-        RAII_LOCK(x_mtx);
-        if (x_pIoGroup)
+        if (x_atmuState.fetch_or(x_kubAssigned) & x_kubAssigned)
             throw ExnIllegalState();
         x_pTpIo = vIoGroup.RegisterIo(x_hFile, this);
         x_pIoGroup = &vIoGroup;
     }
 
-    // does not cancel pending send requests
     inline void Shutdown() noexcept {
-        RAII_LOCK(x_mtx);
-        X_Shutdown();
+        Close();
     }
 
-    // cancels all pending requests
     inline void Close() noexcept {
-        RAII_LOCK(x_mtx);
-        X_Close();
+        auto uState = x_atmuState.fetch_or(x_kubStopping);
+        if (!(uState & x_kumPending))
+            X_Finalize();
     }
 
-    inline void PostRead(ByteChunk *pChunk) {
-        pChunk->pfnIoCallback = X_FwdOnRead;
-        RAII_LOCK(x_mtx);
-        if (!x_pIoGroup || x_bStopping)
-            throw ExnIllegalState {};
-        DWORD dwFlags = 0;
-        StartThreadpoolIo(x_pTpIo);
+    template<class tChunk>
+    inline void PostRead(tChunk *pChunk) {
+        pChunk->pfnIoCallback = X_FwdOnRead<tChunk>;
         auto dwToRead = static_cast<DWORD>(pChunk->GetWritable()) & 0xfffff000U;
+        StartThreadpoolIo(x_pTpIo);
+        auto uState = x_atmuState.fetch_add(1);
+        if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
+            X_EndIo();
+            throw ExnIllegalState {};
+        }
         auto dwbRes = ReadFile(x_hFile, pChunk->GetWriter(), dwToRead, nullptr, pChunk);
-        ++x_uRead;
         if (!dwbRes) {
             auto dwError = GetLastError();
             if (dwError != ERROR_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
-                X_EndRead();
-                throw ExnFileRead {dwError, pChunk};
+                X_EndIo();
+                throw ExnFileRead<tChunk> {dwError, pChunk};
             }
         }
     }
 
-    inline void Write(std::unique_ptr<ByteChunk> upChunk) {
-        upChunk->pfnIoCallback = X_FwdOnWrite;
-        RAII_LOCK(x_mtx);
-        if (!x_pIoGroup || x_bStopping)
-            throw ExnIllegalState {};
+    template<class tChunk>
+    inline void Write(std::unique_ptr<tChunk> upChunk) {
+        upChunk->pfnIoCallback = X_FwdOnWrite<tChunk>;
         auto pChunk = upChunk.release();
-        StartThreadpoolIo(x_pTpIo);
         auto dwToWrite = static_cast<DWORD>(pChunk->GetReadable()) & 0xfffff000U;
+        StartThreadpoolIo(x_pTpIo);
+        auto uState = x_atmuState.fetch_add(1);
+        if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
+            X_EndIo();
+            throw ExnIllegalState {};
+        }
         auto dwbRes = WriteFile(x_hFile, pChunk->GetReader(), dwToWrite, nullptr, pChunk);
-        ++x_uWrite;
         if (!dwbRes) {
             auto dwError = GetLastError();
             if (dwError != ERROR_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
-                X_EndWrite();
-                throw ExnFileWrite {dwError, std::unique_ptr<ByteChunk>(pChunk)};
+                X_EndIo();
+                throw ExnFileWrite<tChunk> {dwError, std::unique_ptr<tChunk>(pChunk)};
             }
         }
     }
 
 private:
-    void X_Shutdown() noexcept {
-        if (x_bStopping)
-            return;
-        x_bStopping = true;
-        if (!x_uWrite)
-            X_Close();
-    }
-
-    void X_Close() noexcept {
-        x_bStopping = true;
-        X_CloseFile();
-        if (!x_uRead)
-            X_Finalize();
-    }
-
     inline void X_Finalize() noexcept {
-        if (x_pIoGroup) {
+        auto uState = x_atmuState.fetch_and(~x_kubAssigned);
+        if (uState & x_kubAssigned)
             x_pIoGroup->UnregisterIo(x_pTpIo);
-            x_pIoGroup = nullptr;
-        }
-        if (!x_bFinalized) {
-            x_bFinalized = true;
+        uState = x_atmuState.fetch_or(x_kubFinalized);
+        if (!(uState & x_kubFinalized))
             x_vUpper.OnFinalize();
-        }
     }
 
-    inline void X_EndRead() noexcept {
-        if (!--x_uRead && x_bStopping) {
+    inline void X_EndIo() noexcept {
+        auto uState = x_atmuState.fetch_sub(1);
+        if ((uState & x_kubStopping) && (uState & x_kumPending) == 1) {
             X_CloseFile();
             X_Finalize();
         }
     }
 
-    inline void X_EndWrite() noexcept {
-        if (!--x_uWrite && x_bStopping)
-            X_Close();
-    }
-
     inline void X_CloseFile() noexcept {
-        if (x_hFile != INVALID_HANDLE_VALUE) {
-            CloseHandle(x_hFile);
-            x_hFile = INVALID_HANDLE_VALUE;
-        }
+        auto hFile = reinterpret_cast<HANDLE>(InterlockedExchangePointer(&x_hFile, INVALID_HANDLE_VALUE));
+        if (hFile != INVALID_HANDLE_VALUE)
+            CloseHandle(hFile);
     }
 
 private:
-    inline void X_IocbOnRead(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
+    template<class tChunk>
+    inline void X_IocbOnRead(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
             x_vUpper.OnRead(dwRes, 0, pChunk);
         else {
             pChunk->Skip(uDone);
             x_vUpper.OnRead(0, uDone, pChunk);
         }
-        RAII_LOCK(x_mtx);
-        X_EndRead();
+        X_EndIo();
     }
 
-    inline void X_IocbOnWrite(DWORD dwRes, USize uDone, ByteChunk *pChunk) noexcept {
+    template<class tChunk>
+    inline void X_IocbOnWrite(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
-            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<ByteChunk>(pChunk));
+            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<tChunk>(pChunk));
         else {
             pChunk->Discard(uDone);
-            x_vUpper.OnWrite(0, uDone, std::unique_ptr<ByteChunk>(pChunk));
+            x_vUpper.OnWrite(0, uDone, std::unique_ptr<tChunk>(pChunk));
         }
-        RAII_LOCK(x_mtx);
-        X_EndWrite();
+        X_EndIo();
     }
 
+    template<class tChunk>
     static void X_FwdOnRead(
-        void *pParam, DWORD dwRes, USize uDone, ByteChunk *pChunk
+        void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
     ) noexcept {
-        reinterpret_cast<FileIo *>(pParam)->X_IocbOnRead(dwRes, uDone, pChunk);
+        reinterpret_cast<FileIo *>(pParam)->X_IocbOnRead(dwRes, uDone, static_cast<tChunk *>(pCtx));
     }
 
+    template<class tChunk>
     static void X_FwdOnWrite(
-        void *pParam, DWORD dwRes, USize uDone, ByteChunk *pChunk
+        void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
     ) noexcept {
-        reinterpret_cast<FileIo *>(pParam)->X_IocbOnWrite(dwRes, uDone, pChunk);
+        reinterpret_cast<FileIo *>(pParam)->X_IocbOnWrite(dwRes, uDone, static_cast<tChunk *>(pCtx));
     }
+
+private:
+    constexpr static U32 x_kubStopping = 0x80000000;
+    constexpr static U32 x_kubAssigned = 0x40000000;
+    constexpr static U32 x_kubFinalized = 0x20000000;
+    constexpr static U32 x_kumPending = 0x1fffffff;
 
 private:
     Upper &x_vUpper;
 
-    RecursiveMutex x_mtx;
-    bool x_bStopping = false;
+    Mutex x_mtx;
     bool x_bFinalized = false;
+
+    std::atomic<U32> x_atmuState = 0;
 
     IoGroup *x_pIoGroup = nullptr;
     PTP_IO x_pTpIo = nullptr;
 
-    USize x_uRead = 0;
-    USize x_uWrite = 0;
-
     HANDLE x_hFile = INVALID_HANDLE_VALUE;
+
     U64 x_uSize;
 
 };

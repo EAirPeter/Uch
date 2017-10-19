@@ -63,11 +63,11 @@ VOID IoGroup::X_TpcbOnIo(
 ) noexcept {
     UNREFERENCED_PARAMETER(pTpcbInst);
     UNREFERENCED_PARAMETER(pTpIo);
-    auto pChunk = static_cast<ByteChunk *>(
+    auto pCtx = static_cast<ChunkIoContext *>(
         reinterpret_cast<OVERLAPPED *>(pOverlapped)
     );
-    auto pfnIoCallback = pChunk->pfnIoCallback;
-    pfnIoCallback(pParam, static_cast<DWORD>(uRes), static_cast<USize>(uDone), pChunk);
+    auto pfnIoCallback = pCtx->pfnIoCallback;
+    pfnIoCallback(pParam, static_cast<DWORD>(uRes), static_cast<U32>(uDone), pCtx);
 }
 
 VOID IoGroup::X_TpcbOnTimer(
@@ -77,7 +77,7 @@ VOID IoGroup::X_TpcbOnTimer(
     UNREFERENCED_PARAMETER(pTpTimer);
     auto pCtx = reinterpret_cast<X_TpTimerContext *>(pParam);
     auto usNow = GetTimeStamp();
-    if (!pCtx->mtx.TryAcquire()) {// lag
+    if (!pCtx->mtx.TryAcquire()) { // lag
         DBG_PRINTLN("lag");
         return;
     }
@@ -96,6 +96,7 @@ VOID IoGroup::X_TpcbOnWait(
 ) noexcept {
     UNREFERENCED_PARAMETER(pTpcbInst);
     UNREFERENCED_PARAMETER(pTpWait);
+    UNREFERENCED_PARAMETER(dwRes);
     assert(dwRes == WAIT_OBJECT_0);
     auto pCtx = reinterpret_cast<X_TpWaitContext *>(pParam);
     WSANETWORKEVENTS vNetev;

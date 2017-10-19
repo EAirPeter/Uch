@@ -66,6 +66,12 @@
     <ClInclude Include="FileIo.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="UcpSeg.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Pool.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ByteBuffer.cpp">

@@ -44,7 +44,7 @@ public:
     RecursiveMutex(RecursiveMutex &&) = delete;
 
     inline ~RecursiveMutex() {
-        assert(!d_atmnCount.load(std::memory_order_relaxed));
+        assert(!d_atmnCount.load());
         DeleteCriticalSection(&x_vCritSec);
     }
 
@@ -58,17 +58,17 @@ public:
 
     inline void Acquire() noexcept {
         EnterCriticalSection(&x_vCritSec);
-        assert(d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0);
+        assert(d_atmnCount.fetch_add(1) >= 0);
     }
 
     inline bool TryAcquire() noexcept {
         auto bRes = TryEnterCriticalSection(&x_vCritSec);
-        assert(bRes ? d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0 : true);
+        assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
         return bRes;
     }
 
     inline void Release() noexcept {
-        assert(d_atmnCount.fetch_sub(1, std::memory_order_relaxed) > 0);
+        assert(d_atmnCount.fetch_sub(1) > 0);
         LeaveCriticalSection(&x_vCritSec);
     }
 
@@ -88,7 +88,7 @@ public:
 
 #ifndef NDEBUG
     inline ~Mutex() {
-        assert(!d_atmnCount.load(std::memory_order_relaxed));
+        assert(!d_atmnCount.load());
     }
 #endif
 
@@ -102,17 +102,17 @@ public:
 
     inline void Acquire() noexcept {
         AcquireSRWLockExclusive(&x_vSrwl);
-        assert(d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0);
+        assert(d_atmnCount.fetch_add(1) >= 0);
     }
 
     inline bool TryAcquire() noexcept {
         auto bRes = TryAcquireSRWLockExclusive(&x_vSrwl);
-        assert(bRes ? d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0 : true);
+        assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
         return bRes;
     }
 
     inline void Release() noexcept {
-        assert(d_atmnCount.fetch_sub(1, std::memory_order_relaxed) > 0);
+        assert(d_atmnCount.fetch_sub(1) > 0);
         ReleaseSRWLockExclusive(&x_vSrwl);
     }
 
@@ -137,7 +137,7 @@ public:
 
 #ifndef NDEBUG
         inline ~ReadLock() {
-            assert(!d_atmnCount.load(std::memory_order_relaxed));
+            assert(!d_atmnCount.load());
         }
 #endif
 
@@ -151,17 +151,17 @@ public:
 
         inline void Acquire() noexcept {
             AcquireSRWLockShared(x_pSrwl);
-            assert(d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0);
+            assert(d_atmnCount.fetch_add(1) >= 0);
         }
 
         inline bool TryAcquire() noexcept {
             auto bRes = TryAcquireSRWLockShared(x_pSrwl);
-            assert(bRes ? d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0 : true);
+            assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
             return bRes;
         }
 
         inline void Release() noexcept {
-            assert(d_atmnCount.fetch_sub(1, std::memory_order_relaxed) > 0);
+            assert(d_atmnCount.fetch_sub(1) > 0);
             ReleaseSRWLockShared(x_pSrwl);
         }
 
@@ -184,7 +184,7 @@ public:
 
 #ifndef NDEBUG
         inline ~WriteLock() {
-            assert(!d_atmnCount.load(std::memory_order_relaxed));
+            assert(!d_atmnCount.load());
         }
 #endif
 
@@ -198,17 +198,17 @@ public:
 
         inline void Acquire() noexcept {
             AcquireSRWLockExclusive(x_pSrwl);
-            assert(d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0);
+            assert(d_atmnCount.fetch_add(1) >= 0);
         }
 
         inline bool TryAcquire() noexcept {
             auto bRes = TryAcquireSRWLockExclusive(x_pSrwl);
-            assert(bRes ? d_atmnCount.fetch_add(1, std::memory_order_relaxed) >= 0 : true);
+            assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
             return bRes;
         }
 
         inline void Release() noexcept {
-            assert(d_atmnCount.fetch_sub(1, std::memory_order_relaxed) > 0);
+            assert(d_atmnCount.fetch_sub(1) > 0);
             ReleaseSRWLockExclusive(x_pSrwl);
         }
 

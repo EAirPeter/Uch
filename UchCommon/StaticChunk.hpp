@@ -2,7 +2,7 @@
 
 #include "Common.hpp"
 
-template<USize kuCapacity>
+template<U32 kuCapacity>
 class StaticChunk {
 public:
     constexpr StaticChunk() noexcept = default;
@@ -13,16 +13,16 @@ public:
     StaticChunk &operator =(StaticChunk &&) = delete;
 
 public:
-    constexpr USize GetCapacity() const noexcept {
+    constexpr U32 GetCapacity() const noexcept {
         return kuCapacity;
     }
 
-    constexpr USize GetReaderIdx() const noexcept {
-        return static_cast<USize>(x_pReader - x_abyData);
+    constexpr U32 GetReaderIdx() const noexcept {
+        return static_cast<U32>(x_pReader - x_abyData);
     }
 
-    constexpr USize GetWriterIdx() const noexcept {
-        return static_cast<USize>(x_pWriter - x_abyData);
+    constexpr U32 GetWriterIdx() const noexcept {
+        return static_cast<U32>(x_pWriter - x_abyData);
     }
 
     constexpr bool IsPrependable() const noexcept {
@@ -37,16 +37,16 @@ public:
         return x_pWriter != x_abyData + kuCapacity;
     }
 
-    constexpr USize GetPrependable() const noexcept {
-        return static_cast<USize>(x_pReader - x_abyData);
+    constexpr U32 GetPrependable() const noexcept {
+        return static_cast<U32>(x_pReader - x_abyData);
     }
 
-    constexpr USize GetReadable() const noexcept {
-        return static_cast<USize>(x_pWriter - x_pReader);
+    constexpr U32 GetReadable() const noexcept {
+        return static_cast<U32>(x_pWriter - x_pReader);
     }
 
-    constexpr USize GetWritable() const noexcept {
-        return kuCapacity - static_cast<USize>(x_pWriter - x_abyData);
+    constexpr U32 GetWritable() const noexcept {
+        return kuCapacity - static_cast<U32>(x_pWriter - x_abyData);
     }
 
     constexpr Byte *GetData() noexcept {
@@ -79,7 +79,7 @@ public:
         x_pWriter = x_abyData;
     }
 
-    constexpr void ToIdx(USize uIdx) noexcept {
+    constexpr void ToIdx(U32 uIdx) noexcept {
         x_pReader = x_abyData + uIdx;
         x_pWriter = x_abyData + uIdx;
     }
@@ -89,45 +89,45 @@ public:
         x_pWriter = x_abyData + kuCapacity;
     }
 
-    constexpr void Discard(USize uSize) noexcept {
+    constexpr void Discard(U32 uSize) noexcept {
         x_pReader += uSize;
     }
 
-    constexpr void Skip(USize uSize) noexcept {
+    constexpr void Skip(U32 uSize) noexcept {
         x_pWriter += uSize;
     }
 
-    inline void Prepend(const void *pData, USize uSize) noexcept {
+    inline void Prepend(const void *pData, U32 uSize) noexcept {
         x_pReader -= uSize;
         std::memcpy(x_pReader, pData, uSize);
     }
 
-    inline void Peek(void *pData, USize uSize) const noexcept {
+    inline void Peek(void *pData, U32 uSize) const noexcept {
         std::memcpy(pData, x_pReader, uSize);
     }
 
-    inline void Read(void *pData, USize uSize) noexcept {
+    inline void Read(void *pData, U32 uSize) noexcept {
         std::memcpy(pData, x_pReader, uSize);
         x_pReader += uSize;
     }
 
-    inline void Write(const void *pData, USize uSize) noexcept {
+    inline void Write(const void *pData, U32 uSize) noexcept {
         std::memcpy(x_pWriter, pData, uSize);
         x_pWriter += uSize;
     }
 
-    inline void Fill(Byte byVal, USize uSize) noexcept {
+    inline void Fill(Byte byVal, U32 uSize) noexcept {
         std::memset(x_pWriter, static_cast<int>(byVal), uSize);
         x_pWriter += uSize;
     }
 
-    inline void Suck(StaticChunk &vChunk, USize uSize) noexcept {
+    inline void Suck(StaticChunk &vChunk, U32 uSize) noexcept {
         x_pReader -= uSize;
         vChunk.x_pWriter -= uSize;
         std::memcpy(x_pReader, vChunk.x_pWriter, uSize);
     }
 
-    inline void Transfer(StaticChunk &vChunk, USize uSize) noexcept {
+    inline void Transfer(StaticChunk &vChunk, U32 uSize) noexcept {
         std::memcpy(x_pWriter, vChunk.x_pReader, uSize);
         x_pWriter += uSize;
         vChunk.x_pReader += uSize;
