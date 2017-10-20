@@ -73,7 +73,7 @@ public:
     template<class tChunk>
     inline void PostRead(tChunk *pChunk) {
         pChunk->pfnIoCallback = X_FwdOnRead<tChunk>;
-        auto dwToRead = static_cast<DWORD>(pChunk->GetWritable()) & 0xfffff000U;
+        auto dwToRead = static_cast<DWORD>(pChunk->GetWritable());
         StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(1);
         if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
@@ -95,7 +95,7 @@ public:
     inline void Write(std::unique_ptr<tChunk> upChunk) {
         upChunk->pfnIoCallback = X_FwdOnWrite<tChunk>;
         auto pChunk = upChunk.release();
-        auto dwToWrite = static_cast<DWORD>(pChunk->GetReadable()) & 0xfffff000U;
+        auto dwToWrite = static_cast<DWORD>(pChunk->GetReadable());
         StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(1);
         if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
@@ -115,11 +115,9 @@ public:
 
 private:
     inline void X_Finalize() noexcept {
-        auto uState = x_atmuState.fetch_and(~x_kubAssigned);
-        if (uState & x_kubAssigned)
+        if (x_atmuState.fetch_and(~x_kubAssigned) & x_kubAssigned)
             x_pIoGroup->UnregisterIo(x_pTpIo);
-        uState = x_atmuState.fetch_or(x_kubFinalized);
-        if (!(uState & x_kubFinalized))
+        if (!(x_atmuState.fetch_or(x_kubFinalized) & x_kubFinalized))
             x_vUpper.OnFinalize();
     }
 
@@ -132,9 +130,8 @@ private:
     }
 
     inline void X_CloseFile() noexcept {
-        auto hFile = reinterpret_cast<HANDLE>(InterlockedExchangePointer(&x_hFile, INVALID_HANDLE_VALUE));
-        if (hFile != INVALID_HANDLE_VALUE)
-            CloseHandle(hFile);
+        if (!(x_atmuState.fetch_or(x_kubClosed) & x_kubClosed))
+            CloseHandle(x_hFile);
     }
 
 private:
@@ -178,13 +175,11 @@ private:
     constexpr static U32 x_kubStopping = 0x80000000;
     constexpr static U32 x_kubAssigned = 0x40000000;
     constexpr static U32 x_kubFinalized = 0x20000000;
-    constexpr static U32 x_kumPending = 0x1fffffff;
+    constexpr static U32 x_kubClosed = 0x10000000;
+    constexpr static U32 x_kumPending = 0x0fffffff;
 
 private:
     Upper &x_vUpper;
-
-    Mutex x_mtx;
-    bool x_bFinalized = false;
 
     std::atomic<U32> x_atmuState = 0;
 

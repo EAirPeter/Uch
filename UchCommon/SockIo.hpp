@@ -37,7 +37,6 @@ public:
     {}
 
     ~SockIo() {
-        RAII_LOCK(x_mtx);
         closesocket(x_hSocket);
     }
 
@@ -63,8 +62,7 @@ public:
 
 public:
     inline void AssignToIoGroup(IoGroup &vIoGroup) {
-        RAII_LOCK(x_mtx);
-        if (x_pIoGroup)
+        if (x_atmuState.fetch_or(x_kubAssigned) & x_kubAssigned)
             throw ExnIllegalState();
         x_pTpIo = vIoGroup.RegisterIo(reinterpret_cast<HANDLE>(x_hSocket), this);
         x_pIoGroup = &vIoGroup;
@@ -72,13 +70,18 @@ public:
 
     // does not cancel pending send requests
     inline void Shutdown() noexcept {
-        RAII_LOCK(x_mtx);
-        X_Shutdown();
+        if (x_atmuState.fetch_or(x_kubStopping) & x_kubStopping)
+            return;
+        shutdown(x_hSocket, SD_BOTH);
+        if (!(x_atmuState.load() & x_kumSend)) {
+            closesocket(x_hSocket);
+            if (!(x_atmuState.load() & x_kumRecv))
+                X_Finalize();
+        }
     }
 
     // cancels all pending requests
     inline void Close() noexcept {
-        RAII_LOCK(x_mtx);
         X_Close();
     }
 
@@ -89,13 +92,14 @@ public:
             reinterpret_cast<char *>(pChunk->GetWriter())
         };
         pChunk->pfnIoCallback = X_FwdOnRecv<tChunk>;
-        RAII_LOCK(x_mtx);
-        if (!x_pIoGroup || x_bStopping)
-            throw ExnIllegalState {};
         DWORD dwFlags = 0;
         StartThreadpoolIo(x_pTpIo);
+        auto uState = x_atmuState.fetch_add(x_kucRecv);
+        if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
+            X_EndRecv();
+            throw ExnIllegalState {};
+        }
         auto nRes = WSARecv(x_hSocket, &vWsaBuf, 1, nullptr, &dwFlags, pChunk, nullptr);
-        ++x_uRecv;
         if (nRes == SOCKET_ERROR) {
             nRes = WSAGetLastError();
             if (nRes != WSA_IO_PENDING) {
@@ -113,12 +117,13 @@ public:
             reinterpret_cast<char *>(pChunk->GetReader())
         };
         pChunk->pfnIoCallback = X_FwdOnSend<tChunk>;
-        RAII_LOCK(x_mtx);
-        if (!x_pIoGroup || x_bStopping)
-            throw ExnIllegalState {};
         StartThreadpoolIo(x_pTpIo);
+        auto uState = x_atmuState.fetch_add(x_kucSend);
+        if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
+            X_EndSend();
+            throw ExnIllegalState {};
+        }
         auto nRes = WSASend(x_hSocket, &vWsaBuf, 1, nullptr, 0, pChunk, nullptr);
-        ++x_uSend;
         if (nRes == SOCKET_ERROR) {
             nRes = WSAGetLastError();
             if (nRes != WSA_IO_PENDING) {
@@ -130,43 +135,37 @@ public:
     }
 
 private:
-    void X_Shutdown() noexcept {
-        if (x_bStopping)
-            return;
-        x_bStopping = true;
-        shutdown(x_hSocket, SD_BOTH);
-        if (!x_uSend)
-            X_Close();
-    }
-
     void X_Close() noexcept {
-        x_bStopping = true;
-        closesocket(x_hSocket);
-        if (!x_uRecv)
+        x_atmuState.fetch_or(x_kubStopping);
+        X_CloseSocket();
+        if (!(x_atmuState.load() & x_kumRecv))
             X_Finalize();
     }
 
     inline void X_Finalize() noexcept {
-        if (x_pIoGroup) {
+        if (x_atmuState.fetch_and(~x_kubAssigned) & x_kubAssigned)
             x_pIoGroup->UnregisterIo(x_pTpIo);
-            x_pIoGroup = nullptr;
-        }
-        if (!x_bFinalized) {
-            x_bFinalized = true;
+        if (!(x_atmuState.fetch_or(x_kubFinalized) & x_kubFinalized))
             x_vUpper.OnFinalize();
-        }
     }
 
     inline void X_EndRecv() noexcept {
-        if (!--x_uRecv && x_bStopping) {
-            closesocket(x_hSocket);
+        auto uState = x_atmuState.fetch_sub(x_kucRecv);
+        if ((uState & x_kubStopping) && (uState & x_kumRecv) == x_kucRecv) {
+            X_CloseSocket();
             X_Finalize();
         }
     }
 
     inline void X_EndSend() noexcept {
-        if (!--x_uSend && x_bStopping)
+        auto uState = x_atmuState.fetch_sub(x_kucSend);
+        if ((uState & x_kubStopping) && (uState & x_kumSend) == x_kucSend)
             X_Close();
+    }
+
+    inline void X_CloseSocket() noexcept {
+        if (!(x_atmuState.fetch_or(x_kubClosed) & x_kubClosed))
+            closesocket(x_hSocket);
     }
 
 private:
@@ -178,7 +177,6 @@ private:
             pChunk->Skip(uDone);
             x_vUpper.OnRead(0, uDone, pChunk);
         }
-        RAII_LOCK(x_mtx);
         X_EndRecv();
     }
 
@@ -190,7 +188,6 @@ private:
             pChunk->Discard(uDone);
             x_vUpper.OnWrite(0, uDone, pChunk);
         }
-        RAII_LOCK(x_mtx);
         X_EndSend();
     }
 
@@ -209,18 +206,23 @@ private:
     }
 
 private:
+    constexpr static U64 x_kubStopping = 0x8000000000000000;
+    constexpr static U64 x_kubAssigned = 0x4000000000000000;
+    constexpr static U64 x_kubFinalized = 0x2000000000000000;
+    constexpr static U64 x_kubClosed = 0x1000000000000000;
+    constexpr static U64 x_kumRecv = 0x0fffffffc0000000;
+    constexpr static U64 x_kumSend = 0x000000003fffffff;
+    constexpr static U64 x_kucRecv = 0x0000000040000000;
+    constexpr static U64 x_kucSend = 0x0000000000000001;
+
+private:
     Upper &x_vUpper;
 
-    RecursiveMutex x_mtx;
-    bool x_bStopping = false;
-    bool x_bFinalized = false;
+    std::atomic<U64> x_atmuState = 0;
 
     IoGroup *x_pIoGroup = nullptr;
     PTP_IO x_pTpIo = nullptr;
 
-    U32 x_uSend = 0;
-    U32 x_uRecv = 0;
-    
     SOCKET x_hSocket;
     SockName x_vSnLocal;
     SockName x_vSnRemote;

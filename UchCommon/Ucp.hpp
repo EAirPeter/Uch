@@ -14,7 +14,7 @@
 
 namespace ImplUcp {
 
-#if 1
+#if 0
 #   define UCP_DBGOUT(...) DBG_PRINTLN( \
         L"[Ucp ", std::setw(4), std::setfill(L'0'), std::hex, std::uppercase, ((UPtr) this & 0xffff), \
         L"][", std::setw(18), std::setfill(L' '), __func__, "] ", std::dec, __VA_ARGS__ \
@@ -70,7 +70,14 @@ namespace ImplUcp {
         }
 
         constexpr void FreeRwnd(U32 uzPak) noexcept {
-            x_atmuzRwnd.fetch_add((uzPak + kuMps) / kuMps * kuShs + uzPak + 1);
+            auto uzRwndFree = (uzPak + kuMps) / kuMps * kuShs + uzPak + 1;
+            auto nzRwnd = static_cast<I32>(x_atmuzRwnd.fetch_add(uzRwndFree));
+            auto nzRwndFree = static_cast<I32>(uzRwndFree);
+            auto nzMss = static_cast<I32>(kuMss);
+            if (nzRwnd < nzMss && nzRwnd + nzRwndFree >= nzMss) {
+                RAII_LOCK(x_mtx);
+                x_bNeedAck = true;
+            }
         }
 
      public:
@@ -519,7 +526,7 @@ namespace ImplUcp {
         }
 
         inline void X_PrepareQSnd() noexcept {
-            auto uzSwnd = std::min(x_uzCwnd, (x_ucRwnd + 1) * kuMss);
+            auto uzSwnd = std::min(x_uzCwnd, x_ucRwnd * kuMss);
             auto uzBound = (x_qSnd.IsEmpty() ? x_uzSndIdx : x_qSnd.GetHead()->uzIdx) + uzSwnd;
             auto unBound = SeqIncrease(x_unSndAck, x_kucBuf);
             U32 uzQueFree = 0;
@@ -627,12 +634,12 @@ namespace ImplUcp {
         constexpr static U64 x_kutTick = 10'000;
         constexpr static U32 x_kucFastResend = 2;
         constexpr static U32 x_kucConnLost = 5;
-        constexpr static U32 x_kuzSsthreshInit = 256 * kuMss;
+        constexpr static U32 x_kuzSsthreshInit = 256 << 20;
         constexpr static U32 x_kuzSsthreshMin = 2 * kuMss;
         constexpr static U32 x_kuzCwndMin = 1 * kuMss;
         constexpr static U32 x_kuzCwndInit = 3 * kuMss;
-        constexpr static U32 x_kuzRwndMax = 4096 * kuMss;
-        constexpr static U32 x_kucBuf = 64;
+        constexpr static U32 x_kuzRwndMax = 64 << 20;
+        constexpr static U32 x_kucBuf = 256;
 
     private:
         bool x_bBroken = false;  // whether Ucp is closed due to timed out

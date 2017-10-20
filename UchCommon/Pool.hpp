@@ -2,15 +2,15 @@
 
 #include "Common.hpp"
 
-template<class tObj>
+template<class tObj, USize kuAlignOff = 0, USize kuAlign = MEMORY_ALLOCATION_ALIGNMENT>
 class Pool {
 public:
     using Obj = tObj;
 
 private:
-    struct X_Block {
-        SLIST_ENTRY vEntry;
+    struct alignas(MEMORY_ALLOCATION_ALIGNMENT) X_Block {
         Obj vObj;
+        SLIST_ENTRY vEntry;
     };
 
 public:
@@ -24,7 +24,7 @@ private:
         InitializeSListHead(&x_vHeader);
         while (uPrepared--) {
             auto pBlock = reinterpret_cast<X_Block *>(
-                ::_aligned_malloc(sizeof(X_Block), MEMORY_ALLOCATION_ALIGNMENT)
+                ::_aligned_offset_malloc(sizeof(X_Block), kuAlign, kuAlignOff)
             );
             assert(pBlock);
             InterlockedPushEntrySList(&x_vHeader, &pBlock->vEntry);

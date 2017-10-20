@@ -8,15 +8,6 @@
 template<U32 kuCapacity>
 class StaticChunk : public ChunkIoContext {
 public:
-    static inline void *operator new(USize) noexcept {
-        return Pool<StaticChunk>::Instance().Alloc();
-    }
-
-    static inline void operator delete(void *pChunk) noexcept {
-        Pool<StaticChunk>::Instance().Dealloc(reinterpret_cast<StaticChunk *>(pChunk));
-    }
-
-public:
     constexpr StaticChunk() noexcept = default;
     StaticChunk(const StaticChunk &) = delete;
     StaticChunk(StaticChunk &&) = delete;
@@ -31,9 +22,11 @@ public:
     StaticChunk &operator =(StaticChunk &&) = delete;
 
 public:
-    constexpr U32 GetCapacity() const noexcept {
+    constexpr static U32 GetCapacity() noexcept {
         return kuCapacity;
     }
+
+public:
 
     constexpr U32 GetReaderIdx() const noexcept {
         return static_cast<U32>(x_pReader - x_abyData);
@@ -152,7 +145,7 @@ public:
     }
 
 protected:
-    Byte x_abyData[kuCapacity];
+    Byte alignas(MEMORY_ALLOCATION_ALIGNMENT) x_abyData[kuCapacity];
     Byte *x_pReader = x_abyData;
     Byte *x_pWriter = x_abyData;
 

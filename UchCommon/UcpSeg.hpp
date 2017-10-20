@@ -32,7 +32,7 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuMss = 65000;
+    constexpr static U32 kuMss = 1444;// 65507;
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
 

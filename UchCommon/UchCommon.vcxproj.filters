@@ -72,6 +72,9 @@
     <ClInclude Include="Pool.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="FileChunk.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ByteBuffer.cpp">
