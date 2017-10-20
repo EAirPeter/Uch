@@ -27,6 +27,10 @@ public:
     }
 
 public:
+    constexpr DWORD GetThreads() const noexcept {
+        return x_dwThreads;
+    }
+
     void Start();
     void Shutdown() noexcept;
     PTP_IO RegisterIo(HANDLE hFile, void *pParam);

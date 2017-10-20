@@ -37,15 +37,19 @@ namespace ImplUcp {
     constexpr static U32 kuMps = kuMss - kuShs;
 
     struct SegHdr {
-        constexpr SegHdr() noexcept = default;
+        inline SegHdr() noexcept = default;
         constexpr SegHdr(const SegHdr &) noexcept = default;
 
         constexpr SegHdr(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 ucSaks_, U32 uzData_, U32 ucFrag_) noexcept :
         unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), ucSaks(ucSaks_), uzData(uzData_), ucFrag(ucFrag_) {}
 
-        inline SegHdr(ByteChunk *pChunk) noexcept {
+        template<class tChunk>
+        inline SegHdr(tChunk *pChunk) noexcept {
             // decode
             assert(pChunk->GetReadable() >= kuShs);
+            unSeq = 0;
+            unAck = 0;
+            ucRwnd = 0;
             pChunk->Read(&unSeq, 3);
             pChunk->Read(&unAck, 3);
             pChunk->Read(&ucRwnd, 2);
@@ -56,14 +60,15 @@ namespace ImplUcp {
             ucFrag = uTmp >> 28;
         }
 
-        U32 unSeq = 0;  // 24-bit sequence number
-        U32 unAck = 0;  // 24-bit acknowledgement number
-        U32 ucRwnd = 0; // 16-bit size of sender's rwnd in count of mss-s
-        U32 ucSaks = 0; // 12-bit count of saks
-        U32 uzData = 0; // 12-bit size of payload in bytes
-        U32 ucFrag = 0; //  8-bit fragment number
+        U32 unSeq;  // 24-bit sequence number
+        U32 unAck;  // 24-bit acknowledgement number
+        U32 ucRwnd; // 16-bit size of sender's rwnd in count of mss-s
+        U32 ucSaks; // 12-bit count of saks
+        U32 uzData; // 12-bit size of payload in bytes
+        U32 ucFrag; //  8-bit fragment number
 
-        inline void Encode(ByteChunk *pChunk) noexcept {
+        template<class tChunk>
+        inline void Encode(tChunk *pChunk) noexcept {
             assert(pChunk->GetWritable() >= kuShs);
             assert(!(unSeq & 0xff000000));
             assert(!(unAck & 0xff000000));
@@ -118,4 +123,9 @@ namespace ImplUcp {
 
     };
 
+    using SegQue = IntrList<SegPayload>;
+
 }
+
+using UcpSeg = ImplUcp::SegPayload;
+using UcpSegQue = ImplUcp::SegQue;

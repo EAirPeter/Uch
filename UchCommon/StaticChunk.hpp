@@ -2,8 +2,20 @@
 
 #include "Common.hpp"
 
+#include "ByteChunk.hpp"
+#include "Pool.hpp"
+
 template<U32 kuCapacity>
-class StaticChunk {
+class StaticChunk : public ChunkIoContext {
+public:
+    static inline void *operator new(USize) noexcept {
+        return Pool<StaticChunk>::Instance().Alloc();
+    }
+
+    static inline void operator delete(void *pChunk) noexcept {
+        Pool<StaticChunk>::Instance().Dealloc(reinterpret_cast<StaticChunk *>(pChunk));
+    }
+
 public:
     constexpr StaticChunk() noexcept = default;
     StaticChunk(const StaticChunk &) = delete;

@@ -216,7 +216,10 @@ public:
     }
 
 private:
-    constexpr IntrList(Element *pHead, Element *pTail) noexcept : x_vNil(pTail, pHead) {}
+    constexpr IntrList(Element *pHead, Element *pTail) noexcept : x_vNil(pTail, pHead) {
+        pHead->Node::x_pPrev = &x_vNil;
+        pTail->Node::x_pNext = &x_vNil;
+    }
 
     constexpr Node *X_Head() noexcept {
         return X_Nil()->x_pNext;
