@@ -81,7 +81,7 @@ namespace ImplUcp {
             vIoGroup.RegisterTick(*this);
             x_pIoGroup = &vIoGroup;
             for (DWORD i = 0; i < vIoGroup.GetThreads(); ++i)
-                X_PostRead(std::make_unique<StaticChunk<kuMss>>());
+                X_PostRead(std::make_unique<SegPayload>(SegRecv {}));
         }
 
         inline void Shutdown() noexcept {
@@ -105,9 +105,8 @@ namespace ImplUcp {
             x_vUpper.OnFinalize();
         }
 
-        template<class tChunk>
-        inline void OnRead(DWORD dwError, U32 uDone, tChunk *pChunk) {
-            auto upChunk = std::unique_ptr<tChunk>(pChunk);
+        inline void OnRead(DWORD dwError, U32 uDone, SegPayload *pSeg) {
+            auto upSeg = std::unique_ptr<SegPayload>(pSeg);
             if (dwError) {
                 // just let the RDT handle this
                 {
@@ -115,34 +114,32 @@ namespace ImplUcp {
                     if (x_bBroken)
                         return;
                 }
-                X_PostRead(std::move(upChunk));
+                X_PostRead(std::move(upSeg));
                 return;
             }
             assert(uDone);
-            assert(uDone == pChunk->GetReadable());
-            SegQue qDsm;
-            std::vector<U32> vecSaks;
-            U32 unAck, ucRwnd;
-            X_DecodeFrame(unAck, ucRwnd, qDsm, vecSaks, pChunk);
+            assert(uDone == pSeg->GetReadable());
+            pSeg->Decode();
             U32 uzRwndAlloc;
             SegQue qAsm;
             {
                 RAII_LOCK(x_mtx);
                 if (x_bBroken)
                     return;
-                X_PostRead(std::move(upChunk));
-                uzRwndAlloc = X_OnRead(qAsm, unAck, ucRwnd, qDsm, vecSaks);
+                X_PostRead(std::make_unique<SegPayload>(SegRecv {}));
+                uzRwndAlloc = X_OnRead(qAsm, std::move(upSeg));
             }
             x_atmuzRwnd.fetch_sub(uzRwndAlloc);
             X_AssemblePackets(qAsm);
         }
 
-        template<class tChunk>
-        inline void OnWrite(DWORD dwError, U32 uDone, std::unique_ptr<tChunk> upChunk) {
+        inline void OnWrite(DWORD dwError, U32 uDone, SegPayload *pSeg) {
             UNREFERENCED_PARAMETER(dwError);
             UNREFERENCED_PARAMETER(uDone);
-            UNREFERENCED_PARAMETER(upChunk);
+            UNREFERENCED_PARAMETER(pSeg);
             // just let the RDT handle this
+            if (!pSeg->uzData)
+                delete pSeg;
         }
 
         bool OnTick(U64 usNow) noexcept {
@@ -164,7 +161,7 @@ namespace ImplUcp {
                 x_uzSend = 0;
                 x_usDue1s = x_usNow + 1'000'000;
             }
-            if (x_bDirty || x_bEchoed || StampDue(x_usNow, x_usTimeout)) {
+            if (x_bDirty || x_bNeedAck || x_bEchoed || StampDue(x_usNow, x_usTimeout)) {
                 try {
                     X_Flush();
                 }
@@ -197,9 +194,9 @@ namespace ImplUcp {
                 while (upChunk->IsReadable()) {
                     if (!pSeg->IsWritable()) {
                         pSeg->uzData = pSeg->GetReadable();
+                        pSeg->ucFrag = 1;
                         qPak.PushTail(std::make_unique<SegPayload>());
                         pSeg = qPak.GetTail();
-                        pSeg->ucFrag = 1;
                     }
                     auto uToWrite = std::min(pSeg->GetWritable(), upChunk->GetReadable());
                     pSeg->Write(upChunk->GetReader(), uToWrite);
@@ -237,6 +234,7 @@ namespace ImplUcp {
         // OnPacket(Byte byPakId, ByteBuffer vPakBuf);
 
     private:
+        /*
         template<class tChunk>
         static inline U32 X_DecodeFrame(
             U32 &unAck, U32 &ucRwnd, SegQue &qDsm,
@@ -260,8 +258,78 @@ namespace ImplUcp {
             }
             assert(!pChunk->IsReadable());
             return unAck;
+        }*/
+
+        inline U32 X_OnRead(SegQue &qAsm, std::unique_ptr<SegPayload> upRcv) noexcept {
+            x_ucRwnd = upRcv->ucRwnd;
+            U32 uzAcked = 0;
+            auto pSnd = x_qSnd.GetHead();
+            while (pSnd != x_qSnd.GetNil() && SeqBefore(pSnd->unSeq, upRcv->unAck)) {
+                X_UpdateRtt(pSnd);
+                uzAcked += pSnd->GetSize();
+                x_uzSend += pSnd->GetSize();
+                pSnd = pSnd->Remove()->GetNext();
+            }
+            if (upRcv->ucSaks) {
+                U64 usSakLatest = StampInfinite(x_usNow);
+                auto pSak = upRcv->GetReader();
+                for (U32 i = 0; i != upRcv->ucSaks; ++i) {
+                    U32 unSak = *reinterpret_cast<U32 *>(pSak) & 0x00ffffff;
+                    while (pSnd != x_qSnd.GetNil() && SeqBefore(pSnd->unSeq, unSak))
+                        pSnd = pSnd->GetNext();
+                    if (pSnd != x_qSnd.GetNil() && pSnd->unSeq == unSak) {
+                        if (StampBefore(usSakLatest, pSnd->usSent))
+                            usSakLatest = pSnd->usSent;
+                        X_UpdateRtt(pSnd);
+                        uzAcked += pSnd->GetSize();
+                        x_uzSend += pSnd->GetSize();
+                        pSnd = pSnd->Remove()->GetNext();
+                    }
+                    pSak += 3;
+                }
+                for (pSnd = x_qSnd.GetHead(); pSnd != x_qSnd.GetNil(); pSnd = pSnd->GetNext())
+                    if (StampBefore(pSnd->usSent, usSakLatest))
+                        ++pSnd->ucSkipped;
+            }
+            x_bEchoed = uzAcked;
+            auto unOldAck = std::exchange(x_unSndAck, x_qSnd.IsEmpty() ? x_unSndSeq : x_qSnd.GetHead()->unSeq);
+            if (unOldAck != x_unSndAck) {
+                if (x_uzCwnd < x_uzSsthresh)
+                    x_uzCwnd += std::min(uzAcked, kuMss);
+                else
+                    x_uzCwnd += std::min(kuMss * kuMss / x_uzCwnd, kuMss);
+            }
+            if(upRcv->uzData) {
+                do {
+                    if (!SeqBefore(upRcv->unSeq, x_unRcvSeq + x_kucBuf))
+                        break;
+                    x_bNeedAck = true;
+                    x_vecSndSaks.emplace_back(upRcv->unSeq);
+                    if (SeqBefore(upRcv->unSeq, x_unRcvSeq))
+                        break;
+                    auto &upQue = x_aRcv[upRcv->unSeq % x_kucBuf];
+                    if (upQue)
+                        continue;
+                    x_uzRecv += upRcv->GetSize();
+                    upQue = std::move(upRcv);
+                    U32 uzRwndAlloc = 0;
+                    auto unBound = SeqIncrease(x_unRcvSeq, x_kucBuf);
+                    while (x_unRcvSeq != unBound && x_aRcv[x_unRcvSeq % x_kucBuf]) {
+                        x_qAsm.PushTail(std::move(x_aRcv[x_unRcvSeq % x_kucBuf]));
+                        x_unRcvSeq = SeqIncrease(x_unRcvSeq);
+                        auto pAsm = x_qAsm.GetTail();
+                        uzRwndAlloc += pAsm->GetSize();
+                        if (!pAsm->ucFrag)
+                            qAsm.Splice(x_qAsm);
+                    }
+                    return uzRwndAlloc;
+                }
+                while (false);
+            }
+            return 0;
         }
 
+        /*
         inline U32 X_OnRead(
             SegQue &qAsm, U32 unAck, U32 ucRwnd,
             SegQue &qDsm, std::vector<U32> &vecSaks
@@ -326,7 +394,7 @@ namespace ImplUcp {
                     qAsm.Splice(x_qAsm);
             }
             return uzRwndAlloc;
-        }
+        }*/
 
         inline void X_UpdateRtt(SegPayload *pSeg) noexcept {
             if (pSeg->ucSent != 1) {
@@ -419,11 +487,6 @@ namespace ImplUcp {
                     x_usTimeout = pSeg->usTimeout;
             }
             X_EncodeSaks(ucRwnd);
-            // flush remaining
-            if (x_upFrameSnd->IsReadable())
-                X_PostWrite();
-            else
-                x_upFrameSnd->ToBegin();
             // update cwnd and ssthresh according to RFC5681
             if (bTimedOut) {
                 ImplDbg::Println("timeout");
@@ -479,9 +542,9 @@ namespace ImplUcp {
 
         inline void X_EncodeSegment(SegPayload *pSeg, U32 ucRwnd) noexcept {
             x_bNeedAck = false;
-            assert(x_upFrameSnd);
             pSeg->unAck = x_unRcvSeq;
             pSeg->ucRwnd = ucRwnd;
+            pSeg->ucSaks = 0;
             ++pSeg->ucSent;
             pSeg->ucSkipped = 0;
             pSeg->usSent = x_usNow;
@@ -489,82 +552,59 @@ namespace ImplUcp {
             UCP_DBGOUT("seq = ", pSeg->unSeq, ", ack = ", pSeg->unAck,
                 ", timedout = ", pSeg->ucTimedOut, ", timeout = ", pSeg->usTimeout
             );
-            if (x_upFrameSnd->GetWritable() < pSeg->GetSize())
-                X_PostWrite();
-            if (!x_vecSndSaks.empty()) {
-                auto ucSaksAppendable = x_upFrameSnd->GetWritable() - pSeg->GetSize() / 3U;
-                auto ucSaksToSend = std::min(ucSaksAppendable, static_cast<U32>(x_vecSndSaks.size()));
-                assert(ucSaksToSend < (1U << 12));
-                pSeg->ucSaks = ucSaksToSend;
-                pSeg->Encode(x_upFrameSnd.get());
-                while (ucSaksToSend--) {
-                    x_upFrameSnd->Write(&x_vecSndSaks.back(), 3);
-                    x_vecSndSaks.pop_back();
-                }
-            }
-            else {
-                pSeg->ucSaks = 0;
-                pSeg->Encode(x_upFrameSnd.get());
-            }
-            x_upFrameSnd->Write(pSeg->GetReader(), pSeg->uzData);
-            // no discard here, since resend is possible
+            pSeg->EncodeHdr();
+            X_PostWrite(pSeg);
         }
 
         inline void X_EncodeSaks(U32 ucRwnd) noexcept {
             if (!x_vecSndSaks.empty()) {
                 x_bNeedAck = false;
                 while (!x_vecSndSaks.empty()) {
-                    if (x_upFrameSnd->GetWritable() < kuShs + 3)
-                        X_PostWrite();
                     auto uSaksToSend = std::min((kuMss - kuShs) / 3, static_cast<U32>(x_vecSndSaks.size()));
-                    SegHdr {0, x_unRcvSeq, ucRwnd, uSaksToSend, 0, 0}.Encode(x_upFrameSnd.get());
+                    auto upSeg = std::make_unique<SegPayload>(0, x_unRcvSeq, ucRwnd, uSaksToSend, 0, 0);
                     UCP_DBGOUT("saks = ", uSaksToSend);
                     while (uSaksToSend--) {
-                        x_upFrameSnd->Write(&x_vecSndSaks.back(), 3);
+                        upSeg->Write(&x_vecSndSaks.back(), 3);
                         x_vecSndSaks.pop_back();
                     }
+                    X_PostWrite(upSeg.release());
                 }
             }
             else if (x_bNeedAck) {
                 x_bNeedAck = false;
-                SegHdr vHdr {0, x_unRcvSeq, ucRwnd, 0, 0, 0};
-                if (x_upFrameSnd->GetWritable() < kuShs)
-                    X_PostWrite();
-                vHdr.Encode(x_upFrameSnd.get());
+                auto upSeg = std::make_unique<SegPayload>(0, x_unRcvSeq, ucRwnd, 0, 0, 0);
                 UCP_DBGOUT("ack = ", x_unRcvSeq);
+                X_PostWrite(upSeg.release());
             }
         }
 
     private:
-        template<class tChunk>
-        inline void X_PostRead(std::unique_ptr<tChunk> upChunk) noexcept {
-            upChunk->ToBegin();
-            auto pChunk = upChunk.release();
+        inline void X_PostRead(std::unique_ptr<SegPayload> upSeg) noexcept {
+            upSeg->ToBegin();
+            auto pSeg = upSeg.release();
             try {
-                x_vLower.PostRead(pChunk);
+                x_vLower.PostRead(pSeg);
             }
-            catch (ExnSockRead<tChunk> &) {
+            catch (ExnSockRead<SegPayload> &) {
                 // just let the RDT handle this
-                upChunk = std::unique_ptr<tChunk>(pChunk);
+                delete pSeg;
             }
             catch (ExnIllegalState) {
                 // active shutdown
-                upChunk = std::unique_ptr<tChunk>(pChunk);
+                delete pSeg;
             }
         }
 
-        inline void X_PostWrite() noexcept {
+        inline void X_PostWrite(SegPayload *pSeg) noexcept {
             try {
-                x_vLower.Write(std::move(x_upFrameSnd));
+                x_vLower.Write<SegPayload>(pSeg);
             }
-            catch (ExnSockWrite<StaticChunk<kuMss>> &) {
+            catch (ExnSockWrite<SegPayload> &) {
                 // just let the RDT handle this
             }
             catch (ExnIllegalState) {
                 // active shutdown
             }
-            assert(!x_upFrameSnd);
-            x_upFrameSnd = std::make_unique<StaticChunk<kuMss>>();
         }
 
     private:
@@ -579,7 +619,7 @@ namespace ImplUcp {
         bool x_bStopping = false;
 
         //std::unique_ptr<ByteChunk> x_upFrameRcv = ByteChunk::MakeUnique(kuMss);
-        std::unique_ptr<StaticChunk<kuMss>> x_upFrameSnd = std::make_unique<StaticChunk<kuMss>>();
+        //std::unique_ptr<StaticChunk<kuMss>> x_upFrameSnd = std::make_unique<StaticChunk<kuMss>>();
 
     private:
         constexpr static U64 x_kutRtoMin = 400'000;

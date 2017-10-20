@@ -21,6 +21,12 @@ public:
     StaticChunk(const StaticChunk &) = delete;
     StaticChunk(StaticChunk &&) = delete;
 
+    constexpr StaticChunk(U32 uOffset) noexcept :
+        ChunkIoContext {},
+        x_pReader(x_abyData + uOffset),
+        x_pWriter(x_abyData + uOffset)
+    {}
+
     StaticChunk &operator =(const StaticChunk &) = delete;
     StaticChunk &operator =(StaticChunk &&) = delete;
 
@@ -145,7 +151,7 @@ public:
         vChunk.x_pReader += uSize;
     }
 
-private:
+protected:
     Byte x_abyData[kuCapacity];
     Byte *x_pReader = x_abyData;
     Byte *x_pWriter = x_abyData;

@@ -12,7 +12,7 @@ namespace ImplUcp {
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
     // | unSeq                       | unAck                       | ucRwnd            |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | ucSaks       | uzData       | ucFrag  | abyPadding (will not be sent)         |
+    // | ucSaks / uzData             | ucFrag  | abyPadding (will not be sent)         |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
     // | unSaks (selective acknowledgements, 3 bytes per sak, ucSaks sak-s in total)   |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
@@ -36,55 +36,6 @@ namespace ImplUcp {
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
 
-    struct SegHdr {
-        inline SegHdr() noexcept = default;
-        constexpr SegHdr(const SegHdr &) noexcept = default;
-
-        constexpr SegHdr(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 ucSaks_, U32 uzData_, U32 ucFrag_) noexcept :
-        unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), ucSaks(ucSaks_), uzData(uzData_), ucFrag(ucFrag_) {}
-
-        template<class tChunk>
-        inline SegHdr(tChunk *pChunk) noexcept {
-            // decode
-            assert(pChunk->GetReadable() >= kuShs);
-            unSeq = 0;
-            unAck = 0;
-            ucRwnd = 0;
-            pChunk->Read(&unSeq, 3);
-            pChunk->Read(&unAck, 3);
-            pChunk->Read(&ucRwnd, 2);
-            U32 uTmp = 0;
-            pChunk->Read(&uTmp, 4);
-            ucSaks = uTmp & 0x00000fff;
-            uzData = uTmp >> 12 & 0x0000ffff;
-            ucFrag = uTmp >> 28;
-        }
-
-        U32 unSeq;  // 24-bit sequence number
-        U32 unAck;  // 24-bit acknowledgement number
-        U32 ucRwnd; // 16-bit size of sender's rwnd in count of mss-s
-        U32 ucSaks; // 12-bit count of saks
-        U32 uzData; // 12-bit size of payload in bytes
-        U32 ucFrag; //  8-bit fragment number
-
-        template<class tChunk>
-        inline void Encode(tChunk *pChunk) noexcept {
-            assert(pChunk->GetWritable() >= kuShs);
-            assert(!(unSeq & 0xff000000));
-            assert(!(unAck & 0xff000000));
-            assert(!(ucRwnd & 0xffff0000));
-            assert(!(ucSaks & 0xfffff000));
-            assert(!(uzData & 0xffff0000));
-            assert(!(ucFrag & 0xfffffff0));
-            pChunk->Write(&unSeq, 3);
-            pChunk->Write(&unAck, 3);
-            pChunk->Write(&ucRwnd, 2);
-            U32 uTmp = ucFrag << 28 | uzData << 12 | ucSaks;
-            pChunk->Write(&uTmp, 4);
-        }
-
-    };
-
     constexpr bool SeqBefore(U32 unSub, U32 unObj) noexcept {
         return (unSub - unObj) & 0x01000000;
     }
@@ -97,7 +48,9 @@ namespace ImplUcp {
         return (unSeq - ucHow) & 0x00ffffff;
     }
 
-    struct SegPayload : SegHdr, StaticChunk<kuMps>, IntrListNode<SegPayload> {
+    struct SegRecv {};
+
+    struct SegPayload : StaticChunk<kuMss>, IntrListNode<SegPayload> {
         static inline void *operator new(USize) noexcept {
             return Pool<SegPayload>::Instance().Alloc();
         }
@@ -106,13 +59,71 @@ namespace ImplUcp {
             Pool<SegPayload>::Instance().Dealloc(reinterpret_cast<SegPayload *>(pSeg));
         }
 
-        inline SegPayload() noexcept = default;
-        inline SegPayload(const SegHdr &vHdr) noexcept : SegHdr(vHdr), StaticChunk(), IntrListNode() {}
-        inline SegPayload(ByteChunk *pChunk) noexcept : SegHdr(pChunk), StaticChunk(), IntrListNode() {}
+        inline SegPayload() noexcept : StaticChunk(kuShs) {}
+
+        inline SegPayload(SegRecv) noexcept : StaticChunk() {}
+
+        inline SegPayload(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 ucSaks_, U32 uzData_, U32 ucFrag_) noexcept :
+            unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), ucSaks(ucSaks_), uzData(uzData_), ucFrag(ucFrag_)
+        {
+            Encode();
+        }
+
+        inline void EncodeHdr() {
+            auto pWriter = x_pWriter;
+            x_pWriter = x_abyData;
+            Encode();
+            x_pWriter = pWriter;
+            x_pReader = x_abyData;
+        }
+
+        inline void Decode() noexcept {
+            assert(GetReadable() >= kuShs);
+            unSeq = 0;
+            unAck = 0;
+            ucRwnd = 0;
+            Read(&unSeq, 3);
+            Read(&unAck, 3);
+            Read(&ucRwnd, 2);
+            U32 uTmp;
+            Read(&uTmp, 4);
+            if (uTmp & 0x00800000) {
+                ucSaks = uTmp & 0x007fffff;
+                uzData = 0;
+            }
+            else {
+                ucSaks = 0;
+                uzData = uTmp & 0x007fffff;
+            }
+            ucFrag = uTmp >> 24;
+        }
+
+        inline void Encode() noexcept {
+            assert(GetWritable() >= kuShs);
+            assert(!(unSeq & 0xff000000));
+            assert(!(unAck & 0xff000000));
+            assert(!(ucRwnd & 0xffff0000));
+            assert(!(ucSaks & 0xff800000));
+            assert(!(uzData & 0xff800000));
+            assert(!(ucFrag & 0xfffffffe));
+            assert(!(ucSaks && uzData));
+            Write(&unSeq, 3);
+            Write(&unAck, 3);
+            Write(&ucRwnd, 2);
+            U32 uTmp = ucFrag << 24 | (uzData ? uzData : ucSaks | 0x00800000);
+            Write(&uTmp, 4);
+        }
 
         constexpr U32 GetSize() noexcept {
             return kuShs + uzData;
         }
+
+        U32 unSeq;  // 24-bit sequence number
+        U32 unAck;  // 24-bit acknowledgement number
+        U32 ucRwnd; // 16-bit size of sender's rwnd in count of mss-s
+        U32 ucSaks; // 12-bit count of saks
+        U32 uzData; // 12-bit size of payload in bytes
+        U32 ucFrag; //  8-bit fragment number
 
         U64 uzIdx;          // index of the first byte
         U32 ucSent;         // sent count

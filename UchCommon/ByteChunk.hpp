@@ -34,7 +34,7 @@ public:
 
 private:
     constexpr ByteChunk(Byte *pEnd) noexcept :
-        ChunkIoContext {}, IntrListNode(),
+        IntrListNode(),
         x_pReader(reinterpret_cast<Byte *>(&this[1])),
         x_pWriter(reinterpret_cast<Byte *>(&this[1])),
         x_pEnd(pEnd)

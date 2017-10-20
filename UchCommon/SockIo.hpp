@@ -16,7 +16,7 @@ struct ExnSockRead {
 template<class tChunk>
 struct ExnSockWrite {
     int nError;
-    std::unique_ptr<tChunk> upChunk;
+    tChunk *pChunk;
 };
 
 template<class tUpper>
@@ -107,16 +107,15 @@ public:
     }
 
     template<class tChunk>
-    inline void Write(std::unique_ptr<tChunk> upChunk) {
+    inline void Write(tChunk *pChunk) {
         WSABUF vWsaBuf {
-            static_cast<ULONG>(upChunk->GetReadable()),
-            reinterpret_cast<char *>(upChunk->GetReader())
+            static_cast<ULONG>(pChunk->GetReadable()),
+            reinterpret_cast<char *>(pChunk->GetReader())
         };
-        upChunk->pfnIoCallback = X_FwdOnSend<tChunk>;
+        pChunk->pfnIoCallback = X_FwdOnSend<tChunk>;
         RAII_LOCK(x_mtx);
         if (!x_pIoGroup || x_bStopping)
             throw ExnIllegalState {};
-        auto pChunk = upChunk.release();
         StartThreadpoolIo(x_pTpIo);
         auto nRes = WSASend(x_hSocket, &vWsaBuf, 1, nullptr, 0, pChunk, nullptr);
         ++x_uSend;
@@ -125,7 +124,7 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndSend();
-                throw ExnSockWrite<tChunk> {nRes, std::unique_ptr<tChunk>(pChunk)};
+                throw ExnSockWrite<tChunk> {nRes, pChunk};
             }
         }
     }
@@ -186,10 +185,10 @@ private:
     template<class tChunk>
     inline void X_IocbOnSend(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
-            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<tChunk>(pChunk));
+            x_vUpper.OnWrite(dwRes, 0, pChunk);
         else {
             pChunk->Discard(uDone);
-            x_vUpper.OnWrite(0, uDone, std::unique_ptr<tChunk>(pChunk));
+            x_vUpper.OnWrite(0, uDone, pChunk);
         }
         RAII_LOCK(x_mtx);
         X_EndSend();

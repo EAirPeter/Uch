@@ -15,7 +15,7 @@ public:
     using Element = tElem;
 
 public:
-    constexpr IntrListNode() = default;
+    inline IntrListNode() = default;
 
     IntrListNode(const IntrListNode &) = delete;
     IntrListNode(IntrListNode &&) = delete;
@@ -66,8 +66,8 @@ private:
     }
 
 private:
-    IntrListNode *x_pPrev = this;
-    IntrListNode *x_pNext = this;
+    IntrListNode *x_pPrev;
+    IntrListNode *x_pNext;
 
 };
 
@@ -246,6 +246,6 @@ private:
     }
 
 private:
-    Node x_vNil;
+    Node x_vNil {&x_vNil, &x_vNil};
 
 };
