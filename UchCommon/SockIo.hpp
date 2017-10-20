@@ -134,6 +134,28 @@ public:
         }
     }
 
+    inline void Transmit(TRANSMIT_PACKETS_ELEMENT *pPaks, U32 ucPaks, U32 uzMss, ChunkIoContext *pCtx) {
+        pCtx->pfnIoCallback = X_FwdOnTransmit;
+        StartThreadpoolIo(x_pTpIo);
+        auto uState = x_atmuState.fetch_add(x_kucSend);
+        if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
+            X_EndSend();
+            throw ExnIllegalState {};
+        }
+        auto dwbRes = Wsimp::TransmitPackets(
+            x_hSocket, pPaks, static_cast<DWORD>(ucPaks),
+            static_cast<DWORD>(uzMss), pCtx, TF_USE_SYSTEM_THREAD
+        );
+        if (!dwbRes) {
+            auto nRes = WSAGetLastError();
+            if (nRes != WSA_IO_PENDING) {
+                CancelThreadpoolIo(x_pTpIo);
+                X_EndSend();
+                throw ExnSockWrite<ChunkIoContext> {nRes, pCtx};
+            }
+        }
+    }
+
 private:
     void X_Close() noexcept {
         x_atmuState.fetch_or(x_kubStopping);
@@ -191,6 +213,11 @@ private:
         X_EndSend();
     }
 
+    inline void X_IocbOnTransmit(DWORD dwRes, U32 uDone, ChunkIoContext *pCtx) noexcept {
+        x_vUpper.OnTransmit(dwRes, uDone, pCtx);
+        X_EndSend();
+    }
+
     template<class tChunk>
     static void X_FwdOnRecv(
         void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
@@ -203,6 +230,12 @@ private:
         void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
     ) noexcept {
         reinterpret_cast<SockIo *>(pParam)->X_IocbOnSend(dwRes, uDone, static_cast<tChunk *>(pCtx));
+    }
+
+    static void X_FwdOnTransmit(
+        void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx
+    ) noexcept {
+        reinterpret_cast<SockIo *>(pParam)->X_IocbOnTransmit(dwRes, uDone, pCtx);
     }
 
 private:

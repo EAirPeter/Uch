@@ -86,9 +86,28 @@ Bootstrap::Bootstrap() {
     auto nRes = WSAStartup(MAKEWORD(2, 2), &wsa);
     if (nRes)
         throw ExnWsa(nRes);
+    auto hSock = CreateUdpSocket();
+    GUID guidTransmitPackets = WSAID_TRANSMITPACKETS;
+    DWORD dwDone;
+    nRes = WSAIoctl(
+        hSock, SIO_GET_EXTENSION_FUNCTION_POINTER,
+        &guidTransmitPackets, static_cast<DWORD>(sizeof(guidTransmitPackets)),
+        &Wsimp::TransmitPackets, static_cast<DWORD>(sizeof(Wsimp::TransmitPackets)),
+        &dwDone, nullptr, nullptr
+    );
+    if (nRes) {
+        nRes = WSAGetLastError();
+        WSACleanup();
+        throw ExnWsa(nRes);
+    }
     QueryPerformanceFrequency(&f_vQpcFreq);
 }
 
 Bootstrap::~Bootstrap() {
     WSACleanup();
+}
+
+namespace Wsimp {
+    LPFN_TRANSMITPACKETS TransmitPackets;
+
 }

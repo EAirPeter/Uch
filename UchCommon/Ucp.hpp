@@ -140,6 +140,7 @@ namespace ImplUcp {
             X_AssemblePackets(qAsm);
         }
 
+#ifndef UCP_TRANSMIT
         inline void OnWrite(DWORD dwError, U32 uDone, SegPayload *pSeg) {
             UNREFERENCED_PARAMETER(dwError);
             UNREFERENCED_PARAMETER(uDone);
@@ -148,6 +149,16 @@ namespace ImplUcp {
             if (!pSeg->uzData)
                 delete pSeg;
         }
+#else
+        inline void OnTransmit(DWORD dwError, U32 uDone, ChunkIoContext *pCtx) {
+            UNREFERENCED_PARAMETER(dwError);
+            UNREFERENCED_PARAMETER(uDone);
+            UNREFERENCED_PARAMETER(pCtx);
+            x_vecTmps.clear();
+            x_vecPaks.clear();
+            x_atmbTransmitting.clear();
+        }
+#endif
 
         bool OnTick(U64 usNow) noexcept {
             RAII_LOCK(x_mtx);
@@ -298,7 +309,8 @@ namespace ImplUcp {
                     if (StampBefore(pSnd->usSent, usSakLatest))
                         ++pSnd->ucSkipped;
             }
-            x_bEchoed = uzAcked;
+            if (uzAcked)
+                x_bEchoed = true;
             auto unOldAck = std::exchange(x_unSndAck, x_qSnd.IsEmpty() ? x_unSndSeq : x_qSnd.GetHead()->unSeq);
             if (unOldAck != x_unSndAck) {
                 if (x_uzCwnd < x_uzSsthresh)
@@ -466,6 +478,12 @@ namespace ImplUcp {
             UCP_DBGOUT("");
             X_PrepareSaks();
             X_PrepareQSnd();
+#ifdef UCP_TRANSMIT
+            if (x_atmbTransmitting.test_and_set()) {
+                // lag
+                return;
+            }
+#endif
             auto uzRwnd = x_atmuzRwnd.load();
             auto ucRwnd = uzRwnd & 0x80000000U ? 0 : uzRwnd / kuMss;
             bool bFastResend = false;
@@ -494,6 +512,9 @@ namespace ImplUcp {
                     x_usTimeout = pSeg->usTimeout;
             }
             X_EncodeSaks(ucRwnd);
+#ifdef UCP_TRANSMIT
+            X_PostTransmit();
+#endif
             // update cwnd and ssthresh according to RFC5681
             if (bTimedOut) {
                 ImplDbg::Println("timeout");
@@ -560,7 +581,11 @@ namespace ImplUcp {
                 ", timedout = ", pSeg->ucTimedOut, ", timeout = ", pSeg->usTimeout
             );
             pSeg->EncodeHdr();
+#ifndef UCP_TRANSMIT
             X_PostWrite(pSeg);
+#else
+            X_PrepareTpe(pSeg);
+#endif
         }
 
         inline void X_EncodeSaks(U32 ucRwnd) noexcept {
@@ -575,15 +600,31 @@ namespace ImplUcp {
                         x_vecSndSaks.pop_back();
                     }
                     X_PostWrite(upSeg.release());
+                    // X_PrepareTpe(upSeg.get());
+                    // x_vecTmps.emplace_back(std::move(upSeg));
                 }
             }
             else if (x_bNeedAck) {
                 x_bNeedAck = false;
                 auto upSeg = std::make_unique<SegPayload>(0, x_unRcvSeq, ucRwnd, 0, 0, 0);
                 UCP_DBGOUT("ack = ", x_unRcvSeq);
+#ifndef UCP_TRANSMIT
                 X_PostWrite(upSeg.release());
+#else
+                X_PrepareTpe(upSeg.get());
+                x_vecTmps.emplace_back(std::move(upSeg));
+#endif
             }
         }
+
+#ifdef UCP_TRANSMIT
+        inline void X_PrepareTpe(SegPayload *pSeg) noexcept {
+            x_vecPaks.emplace_back();
+            x_vecPaks.back().dwElFlags = TP_ELEMENT_MEMORY | TP_ELEMENT_EOP;
+            x_vecPaks.back().cLength = static_cast<ULONG>(pSeg->GetReadable());
+            x_vecPaks.back().pBuffer = pSeg->GetReader();
+        }
+#endif
 
     private:
         inline void X_PostRead(std::unique_ptr<SegPayload> upSeg) noexcept {
@@ -602,6 +643,7 @@ namespace ImplUcp {
             }
         }
 
+#ifndef UCP_TRANSMIT
         inline void X_PostWrite(SegPayload *pSeg) noexcept {
             try {
                 x_vLower.Write<SegPayload>(pSeg);
@@ -613,6 +655,16 @@ namespace ImplUcp {
                 // active shutdown
             }
         }
+#else
+        inline void X_PostTransmit() noexcept {
+            try {
+                x_vLower.Transmit(x_vecPaks.data(), static_cast<U32>(x_vecPaks.size()), kuMss, &x_vCtx);
+            }
+            catch (...) {
+                OnTransmit(0, 0, nullptr);
+            }
+        }
+#endif
 
     private:
         Upper &x_vUpper;
@@ -627,6 +679,12 @@ namespace ImplUcp {
 
         //std::unique_ptr<ByteChunk> x_upFrameRcv = ByteChunk::MakeUnique(kuMss);
         //std::unique_ptr<StaticChunk<kuMss>> x_upFrameSnd = std::make_unique<StaticChunk<kuMss>>();
+#ifdef UCP_TRANSMIT
+        ChunkIoContext x_vCtx {};
+        std::vector<TRANSMIT_PACKETS_ELEMENT> x_vecPaks;
+        std::vector<std::unique_ptr<SegPayload>> x_vecTmps;
+        std::atomic_flag x_atmbTransmitting {};
+#endif
 
     private:
         constexpr static U64 x_kutRtoMin = 400'000;
@@ -638,8 +696,8 @@ namespace ImplUcp {
         constexpr static U32 x_kuzSsthreshMin = 2 * kuMss;
         constexpr static U32 x_kuzCwndMin = 1 * kuMss;
         constexpr static U32 x_kuzCwndInit = 3 * kuMss;
-        constexpr static U32 x_kuzRwndMax = 64 << 20;
-        constexpr static U32 x_kucBuf = 256;
+        constexpr static U32 x_kuzRwndMax = 256 << 20;
+        constexpr static U32 x_kucBuf = 64;
 
     private:
         bool x_bBroken = false;  // whether Ucp is closed due to timed out

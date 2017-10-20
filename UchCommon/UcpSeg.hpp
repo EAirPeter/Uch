@@ -10,9 +10,9 @@ namespace ImplUcp {
     //  0                   1                   2                   3
     //  0123 4567 89AB CDEF 0123 4567 89AB CDEF 0123 4567 89AB CDEF 0123 4567 89AB CDEF
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | unSeq                       | unAck                       | ucRwnd            |
+    // | unSeq                       | unAck                       | ucSaks / uzData   |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | ucSaks / uzData             | ucFrag  | abyPadding (will not be sent)         |
+    // | ucRwnd                      | ucFrag  | abyPadding (will not be sent)         |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
     // | unSaks (selective acknowledgements, 3 bytes per sak, ucSaks sak-s in total)   |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
@@ -32,7 +32,7 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuMss = 1444;// 65507;
+    constexpr static U32 kuMss = 65507;
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
 
@@ -82,36 +82,39 @@ namespace ImplUcp {
             unSeq = 0;
             unAck = 0;
             ucRwnd = 0;
+            ucFrag = 0;
             Read(&unSeq, 3);
             Read(&unAck, 3);
-            Read(&ucRwnd, 2);
-            U32 uTmp;
-            Read(&uTmp, 4);
-            if (uTmp & 0x00800000) {
-                ucSaks = uTmp & 0x007fffff;
+            U16 uTmp;
+            Read(&uTmp, 2);
+            Read(&ucRwnd, 3);
+            Read(&ucFrag, 1);
+            if (ucFrag & 2) {
+                ucFrag &= 1;
+                ucSaks = uTmp;
                 uzData = 0;
             }
             else {
                 ucSaks = 0;
-                uzData = uTmp & 0x007fffff;
+                uzData = uTmp;
             }
-            ucFrag = uTmp >> 24;
         }
 
         inline void Encode() noexcept {
             assert(GetWritable() >= kuShs);
             assert(!(unSeq & 0xff000000));
             assert(!(unAck & 0xff000000));
-            assert(!(ucRwnd & 0xffff0000));
-            assert(!(ucSaks & 0xff800000));
-            assert(!(uzData & 0xff800000));
+            assert(!(ucRwnd & 0xff000000));
+            assert(!(ucSaks & 0xffff0000));
+            assert(!(uzData & 0xffff0000));
             assert(!(ucFrag & 0xfffffffe));
             assert(!(ucSaks && uzData));
             Write(&unSeq, 3);
             Write(&unAck, 3);
-            Write(&ucRwnd, 2);
-            U32 uTmp = ucFrag << 24 | (uzData ? uzData : ucSaks | 0x00800000);
-            Write(&uTmp, 4);
+            Write(uzData ? &uzData : &ucSaks, 2);
+            Write(&ucRwnd, 3);
+            auto uTmp = ucFrag | (uzData ? 0 : 2);
+            Write(&ucFrag, 1);
         }
 
         constexpr U32 GetSize() noexcept {

@@ -9,9 +9,15 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
+#define _WIN32_WINNT 0x0601
+
+#include <sdkddkver.h>
+
 #include <WinSock2.h>
 #include <WS2tcpip.h>
 #include <Windows.h>
+
+#include <MSWSock.h>
 
 #include <intrin.h>
 #include <malloc.h>
@@ -132,3 +138,8 @@ private:
     ~Bootstrap();
 
 };
+
+namespace Wsimp {
+    extern LPFN_TRANSMITPACKETS TransmitPackets;
+
+}
