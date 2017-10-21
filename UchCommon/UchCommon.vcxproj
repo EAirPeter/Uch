@@ -134,6 +134,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Flags.hpp" />
     <ClInclude Include="ByteBuffer.hpp" />
     <ClInclude Include="ByteChunk.hpp" />
     <ClInclude Include="Common.hpp" />

@@ -116,7 +116,7 @@ private:
 
     struct X_TpTimerContext {
         PTP_TIMER pTpTimer = nullptr;
-        RecursiveMutex mtx;
+        Mutex mtx;
         std::list<X_TickContext> liTickCtxs;
     } x_vTimerCtx {};
 

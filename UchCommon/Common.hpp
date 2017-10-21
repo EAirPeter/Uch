@@ -31,6 +31,7 @@
 #include <functional>
 #include <memory>
 #include <new>
+#include <numeric>
 #include <string>
 #include <thread>
 #include <type_traits>

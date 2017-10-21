@@ -3,6 +3,7 @@
 #include "Common.hpp"
 
 #include "ByteChunk.hpp"
+#include "Flags.hpp"
 #include "Pool.hpp"
 #include "StaticChunk.hpp"
 
@@ -12,7 +13,7 @@ namespace ImplUcp {
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
     // | unSeq                       | unAck                       | ucSaks / uzData   |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | ucRwnd                      | ucFrag  | abyPadding (will not be sent)         |
+    // | ucRwnd                      | ubFlags | abyPadding (will not be sent)         |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
     // | unSaks (selective acknowledgements, 3 bytes per sak, ucSaks sak-s in total)   |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
@@ -24,6 +25,7 @@ namespace ImplUcp {
     // unAck means any segment with unSeq < unAck has been acknowledged for sender
     // any one of unSaks should be greater than unAck
 
+    // ub: bitset
     // uc: number of count
     // un: sequence number, for: seq, ack, sak
     // us: time stamp in microseconds according to QPC
@@ -50,83 +52,65 @@ namespace ImplUcp {
 
     struct SegRecv {};
 
-    struct SegPayload : StaticChunk<kuMss>, IntrListNode<SegPayload> {
+    constexpr U32 kubSegFrg = 0x01;
+    constexpr U32 kubSegPsh = 0x02;
+    constexpr U32 kubSegSak = 0x04;
+    constexpr U32 kubSegAsk = 0x08;
+
+    struct UcpSeg : StaticChunk<kuMss>, IntrListNode<UcpSeg> {
         static inline void *operator new(USize) noexcept {
-            return Pool<SegPayload>::Instance().Alloc();
+            return Pool<UcpSeg>::Instance().Alloc();
         }
 
         static inline void operator delete(void *pSeg) noexcept {
-            Pool<SegPayload>::Instance().Dealloc(reinterpret_cast<SegPayload *>(pSeg));
+            Pool<UcpSeg>::Instance().Dealloc(reinterpret_cast<UcpSeg *>(pSeg));
         }
 
-        inline SegPayload() noexcept : StaticChunk(kuShs) {}
+        inline UcpSeg() noexcept : StaticChunk(kuShs) {}
 
-        inline SegPayload(SegRecv) noexcept : StaticChunk() {}
+        inline UcpSeg(SegRecv) noexcept : StaticChunk() {}
 
-        inline SegPayload(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 ucSaks_, U32 uzData_, U32 ucFrag_) noexcept :
-            unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), ucSaks(ucSaks_), uzData(uzData_), ucFrag(ucFrag_)
+        inline UcpSeg(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 uzData_, U32 ubFlags_) noexcept :
+            unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), uzData(uzData_), vFlags(ubFlags_)
         {
             Encode();
-        }
-
-        inline void EncodeHdr() {
-            auto pWriter = x_pWriter;
-            x_pWriter = x_abyData;
-            Encode();
-            x_pWriter = pWriter;
-            x_pReader = x_abyData;
+            x_pWriter = &x_abyData[kuShs];
         }
 
         inline void Decode() noexcept {
             assert(GetReadable() >= kuShs);
-            unSeq = 0;
-            unAck = 0;
-            ucRwnd = 0;
-            ucFrag = 0;
-            Read(&unSeq, 3);
-            Read(&unAck, 3);
-            U16 uTmp;
-            Read(&uTmp, 2);
-            Read(&ucRwnd, 3);
-            Read(&ucFrag, 1);
-            if (ucFrag & 2) {
-                ucFrag &= 1;
-                ucSaks = uTmp;
-                uzData = 0;
-            }
-            else {
-                ucSaks = 0;
-                uzData = uTmp;
-            }
+            assert(x_pReader == x_abyData);
+            unSeq = *reinterpret_cast<U32 *>(&x_abyData[0]) & 0x00ffffff;
+            unAck = *reinterpret_cast<U32 *>(&x_abyData[3]) & 0x00ffffff;
+            uzData = *reinterpret_cast<U16 *>(&x_abyData[6]);
+            ucRwnd = *reinterpret_cast<U32 *>(&x_abyData[8]) & 0x00ffffff;
+            vFlags = *reinterpret_cast<U8 *>(&x_abyData[11]);
+            x_pReader = &x_abyData[kuShs];
         }
 
         inline void Encode() noexcept {
-            assert(GetWritable() >= kuShs);
             assert(!(unSeq & 0xff000000));
             assert(!(unAck & 0xff000000));
             assert(!(ucRwnd & 0xff000000));
-            assert(!(ucSaks & 0xffff0000));
             assert(!(uzData & 0xffff0000));
-            assert(!(ucFrag & 0xfffffffe));
-            assert(!(ucSaks && uzData));
-            Write(&unSeq, 3);
-            Write(&unAck, 3);
-            Write(uzData ? &uzData : &ucSaks, 2);
-            Write(&ucRwnd, 3);
-            auto uTmp = ucFrag | (uzData ? 0 : 2);
-            Write(&ucFrag, 1);
+            assert(!(static_cast<U32>(vFlags) & 0xffffff00));
+            *reinterpret_cast<U32 *>(&x_abyData[0]) = unSeq;
+            *reinterpret_cast<U32 *>(&x_abyData[3]) = unAck;
+            *reinterpret_cast<U16 *>(&x_abyData[6]) = static_cast<U16>(uzData);
+            *reinterpret_cast<U32 *>(&x_abyData[8]) = ucRwnd;
+            *reinterpret_cast<U8 *>(&x_abyData[11]) = static_cast<U8>(static_cast<U32>(vFlags));
+            x_pReader = x_abyData;
         }
 
         constexpr U32 GetSize() noexcept {
             return kuShs + uzData;
         }
 
-        U32 unSeq;  // 24-bit sequence number
-        U32 unAck;  // 24-bit acknowledgement number
-        U32 ucRwnd; // 16-bit size of sender's rwnd in count of mss-s
-        U32 ucSaks; // 12-bit count of saks
-        U32 uzData; // 12-bit size of payload in bytes
-        U32 ucFrag; //  8-bit fragment number
+        U32 unSeq;          // 24-bit sequence number
+        U32 unAck;          // 24-bit acknowledgement number
+        U32 ucRwnd;         // 16-bit size of sender's rwnd in count of mss-s
+        U32 uzData;         // 12-bit count of saks or size of payload in bytes
+        Flags<U32> vFlags;  // 8-bit fragment number
 
         U64 uzIdx;          // index of the first byte
         U32 ucSent;         // sent count
@@ -137,9 +121,9 @@ namespace ImplUcp {
 
     };
 
-    using SegQue = IntrList<SegPayload>;
+    using SegQue = IntrList<UcpSeg>;
 
 }
 
-using UcpSeg = ImplUcp::SegPayload;
+using UcpSeg = ImplUcp::UcpSeg;
 using UcpSegQue = ImplUcp::SegQue;

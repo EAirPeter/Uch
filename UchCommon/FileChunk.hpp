@@ -3,7 +3,7 @@
 #include "StaticChunk.hpp"
 
 namespace ImplFileChunk {
-    constexpr U32 kuSize = 32 << 20;
+    constexpr U32 kuSize = 16 << 20;
     constexpr USize kuAlign = 4 << 10;
 
     struct FileChunk : StaticChunk<kuSize> {
