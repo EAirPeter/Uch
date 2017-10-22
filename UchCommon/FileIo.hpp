@@ -14,7 +14,7 @@ struct ExnFileRead {
 template<class tChunk>
 struct ExnFileWrite {
     DWORD dwError;
-    std::unique_ptr<tChunk> upChunk;
+    tChunk *pChunk;
 };
 
 template<class tUpper>
@@ -92,9 +92,8 @@ public:
     }
 
     template<class tChunk>
-    inline void Write(std::unique_ptr<tChunk> upChunk) {
-        upChunk->pfnIoCallback = X_FwdOnWrite<tChunk>;
-        auto pChunk = upChunk.release();
+    inline void Write(tChunk *pChunk) {
+        pChunk->pfnIoCallback = X_FwdOnWrite<tChunk>;
         auto dwToWrite = static_cast<DWORD>(pChunk->GetReadable());
         StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(1);
@@ -108,7 +107,7 @@ public:
             if (dwError != ERROR_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndIo();
-                throw ExnFileWrite<tChunk> {dwError, std::unique_ptr<tChunk>(pChunk)};
+                throw ExnFileWrite<tChunk> {dwError, pChunk};
             }
         }
     }
@@ -149,10 +148,10 @@ private:
     template<class tChunk>
     inline void X_IocbOnWrite(DWORD dwRes, U32 uDone, tChunk *pChunk) noexcept {
         if (dwRes)
-            x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<tChunk>(pChunk));
+            x_vUpper.OnWrite(dwRes, 0, pChunk);
         else {
             pChunk->IncReader(uDone);
-            x_vUpper.OnWrite(0, uDone, std::unique_ptr<tChunk>(pChunk));
+            x_vUpper.OnWrite(0, uDone, pChunk);
         }
         X_EndIo();
     }
