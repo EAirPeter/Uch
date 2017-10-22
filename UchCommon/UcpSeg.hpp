@@ -10,13 +10,11 @@ namespace ImplUcp {
     //  0                   1                   2                   3
     //  0123 4567 89AB CDEF 0123 4567 89AB CDEF 0123 4567 89AB CDEF 0123 4567 89AB CDEF
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | unSeq                       | unAck                       | ucSaks / uzData   |
+    // | unSeq                       | unAck                       | uzData            |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | ucRwnd                      | ubFlags | abyPadding (will not be sent)         |
+    // | ucRwnd                      | ubFlags |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | unSaks (selective acknowledgements, 3 bytes per sak, ucSaks sak-s in total)   |
-    // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-    // | abyData (payload, uzData bytes in total)                                      |
+    // | (payload, uzData bytes in total) / (saks, uzData * 3 bytes in total)          |
     // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
 
     // unSeq is valid if ucSize is not 0
@@ -33,7 +31,11 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuMss = 1472;// 65507;
+    constexpr static U32 kuIpPaks = 1;
+    constexpr static U32 kuMtu = 1500;
+    constexpr static U32 kuIhs = 20;
+    constexpr static U32 kuUhs = 8;
+    constexpr static U32 kuMss = kuIpPaks * (kuMtu - kuIhs) - kuUhs;
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
     constexpr static U32 kuMaxSaks = (kuMps - 1) / 3;
@@ -49,7 +51,6 @@ namespace ImplUcp {
     constexpr U32 SeqDecrease(U32 unSeq, U32 ucHow = 1) noexcept {
         return (unSeq - ucHow) & 0x00ffffff;
     }
-
 
     constexpr U32 kubSegFrg = 0x01;
     constexpr U32 kubSegPsh = 0x02;

@@ -144,7 +144,7 @@ public:
         }
         auto dwbRes = Wsimp::TransmitPackets(
             x_hSocket, pPaks, static_cast<DWORD>(ucPaks),
-            static_cast<DWORD>(uzMss), pCtx, TF_USE_SYSTEM_THREAD
+            static_cast<DWORD>(uzMss), pCtx, TF_USE_KERNEL_APC
         );
         if (!dwbRes) {
             auto nRes = WSAGetLastError();

@@ -2,6 +2,10 @@
 
 #include "Common.hpp"
 
+#ifndef NDEBUG
+#define POOL_ATMGUARD
+#endif
+
 template<class tPool>
 class PoolDeleter {
 public:
@@ -57,14 +61,7 @@ struct SysPool {
         return UniquePtr(pObj, Deleter(*this));
     }
 
-    inline void Shrink() noexcept {
-        auto pEntry = InterlockedPopEntrySList(&x_vHeader);
-        while (pEntry) {
-            auto pBlock = CONTAINING_RECORD(pEntry, X_Block, vEntry);
-            ::_aligned_free(pBlock);
-            pEntry = InterlockedPopEntrySList(&x_vHeader);
-        }
-    }
+    constexpr void Shrink() noexcept {}
 
 };
 
@@ -97,7 +94,9 @@ public:
     Pool(Pool &&) = delete;
 
     inline ~Pool() {
+#ifdef POOL_ATMGUARD
         while (x_atmuAlloc.load())
+#endif
             Shrink();
     }
 
@@ -108,7 +107,9 @@ public:
     inline Obj *Alloc() noexcept {
         auto pEntry = InterlockedPopEntrySList(&x_vHeader);
         if (pEntry == nullptr) {
+#ifdef POOL_ATMGUARD
             x_atmuAlloc.fetch_add(1);
+#endif
             auto pBlock = reinterpret_cast<X_Block *>(
                 ::_aligned_malloc(sizeof(X_Block), MEMORY_ALLOCATION_ALIGNMENT)
             );
@@ -149,13 +150,17 @@ public:
         while (pEntry) {
             auto pBlock = CONTAINING_RECORD(pEntry, X_Block, vEntry);
             ::_aligned_free(pBlock);
+#ifdef POOL_ATMGUARD
             x_atmuAlloc.fetch_sub(1);
+#endif
             pEntry = InterlockedPopEntrySList(&x_vHeader);
         }
     }
 
 private:
     alignas(MEMORY_ALLOCATION_ALIGNMENT) SLIST_HEADER x_vHeader;
+#ifdef POOL_ATMGUARD
     std::atomic<U32> x_atmuAlloc = 0;
+#endif
 
 };

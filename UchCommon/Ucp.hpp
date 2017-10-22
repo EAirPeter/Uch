@@ -158,7 +158,7 @@ namespace ImplUcp {
             UNREFERENCED_PARAMETER(uDone);
             UNREFERENCED_PARAMETER(pSeg);
             // just let the RDT handle this
-            if (!pSeg->uzData)
+            if (!pSeg->vFlags(kubSegPsh))
                 x_vPool.Delete(pSeg);
         }
 #else
@@ -173,7 +173,9 @@ namespace ImplUcp {
 #endif
 
         bool OnTick(U64 usNow) noexcept {
+#ifdef UCP_TRANSMIT
             bool bTsmAcq = false;
+#endif
             {
                 RAII_LOCK(x_mtx);
                 if (x_vState(x_kubStopping) && x_qQue.IsEmpty() && x_qSnd.IsEmpty()) {
@@ -196,7 +198,10 @@ namespace ImplUcp {
                 constexpr auto ubFlags = x_kubNeedAck | x_kubNeedAsk | x_kubDirty;
                 if (x_vState(ubFlags) || StampDue(x_usNow, x_usTimeout)) {
                     try {
-                        bTsmAcq = X_Flush();
+#ifdef UCP_TRANSMIT
+                        bTsmAcq =
+#endif
+                        X_Flush();
                     }
                     catch (ExnIllegalState) {
                         // connection lost
@@ -343,21 +348,26 @@ namespace ImplUcp {
             UCP_DBGOUT("srtt = ", x_utSRtt, ", rttvar = ", x_utRttVar, ", rto = ", x_utRto);
         }
 
+#ifdef UCP_TRANSMIT
         inline bool X_Flush() {
             UCP_DBGOUT("");
             X_PrepareSaks();
             X_PrepareQSnd();
-#ifdef UCP_TRANSMIT
             if (x_atmbTsm.test_and_set()) {
                 // lag
                 x_vState += x_kubDirty;
                 return false;
             }
+#else
+        inline void X_Flush() {
+            UCP_DBGOUT("");
+            X_PrepareSaks();
+            X_PrepareQSnd();
 #endif
             x_vState -= x_kubDirty | x_kubEchoed;
             if (x_vState(x_kubAsking)) {
                 if (StampDue(x_usNow, x_usAskTimeout)) {
-                    ImplDbg::Println("ask timeout");
+                    // ImplDbg::Println("ask timeout");
                     if (++x_ucAskTimedOut >= x_kucConnLost)
                         throw ExnIllegalState {};
                     x_vState += x_kubNeedAsk;
@@ -378,11 +388,12 @@ namespace ImplUcp {
                 x_usTimeout = StampInfinite(x_usNow);
             auto uzRwnd = x_atmuzAsm.load();
             auto ucRwnd = uzRwnd & 0x80000000U ? 0 : uzRwnd / kuMss;
-            auto uzSwnd = std::min(x_uzCwnd, x_ucRmtRwnd * kuMss);
             auto ucSaks = static_cast<U32>(x_vecSndSaks.size());
             auto ucSakSegs = (ucSaks + kuMaxSaks - 1) / kuMaxSaks;
             auto uzSakSegs = ucSakSegs * kuShs + ucSaks * 3;
-            auto uzPshSegs = uzSwnd > ucSakSegs ? uzSwnd - ucSakSegs : 0;
+            auto uzCwnd = x_uzCwnd > uzSakSegs ? x_uzCwnd - uzSakSegs : 0;
+            auto uzPshSegs = std::min(uzCwnd, x_ucRmtRwnd * kuMss);
+
             bool bFastResend = false;
             bool bTimedOut = false;
             for (auto pSeg = x_qSnd.GetHead(); pSeg != x_qSnd.GetNil(); pSeg = pSeg->GetNext()) {
@@ -419,13 +430,13 @@ namespace ImplUcp {
             X_FlushSaks(ucRwnd);
             // update cwnd and ssthresh according to RFC5681
             if (bTimedOut) {
-                ImplDbg::Println("timeout");
+                // ImplDbg::Println("timeout");
                 x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd >> 1);
                 x_uzCwnd = x_kuzCwndMin;
             }
             else if (bFastResend) {
-                ImplDbg::Println("resend");
-                x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzFlight >> 1);
+                // ImplDbg::Println("resend");
+                x_uzSsthresh = std::max(x_kuzSsthreshMin, std::max(x_uzCwnd, x_uzFlight) >> 1);
                 x_uzCwnd = x_uzSsthresh + x_kucFastResend * kuMss;
             }
             UCP_DBGOUT(
@@ -433,7 +444,9 @@ namespace ImplUcp {
                 ", rwnd = ", x_atmuzAsm.load(), ", xrwnd = ", x_ucRmtRwnd,
                 ", now = ", x_usNow, ", next_timeout = ", x_usTimeout
             );
+#ifdef UCP_TRANSMIT
             return true;
+#endif
         }
 
         inline void X_PrepareSaks() noexcept {
@@ -493,7 +506,7 @@ namespace ImplUcp {
                         x_vecSndSaks.pop_back();
                     }
 #ifndef UCP_TRANSMIT
-                    X_PostWrite(upSeg.release());
+                    X_PostWrite(std::move(upSeg));
 #else
                     X_PushTpe(upSeg.get());
                     x_vecTmpSegs.emplace_back(std::move(upSeg));
@@ -506,7 +519,7 @@ namespace ImplUcp {
                 auto upSeg = x_vPool.MakeUnique(0, x_unRcvSeq, ucRwnd, 0, ubFlags);
                 UCP_DBGOUT("ack = ", x_unRcvSeq);
 #ifndef UCP_TRANSMIT
-                X_PostWrite(upSeg.release());
+                X_PostWrite(std::move(upSeg));
 #else
                 X_PushTpe(upSeg.get());
                 x_vecTmpSegs.emplace_back(std::move(upSeg));
@@ -542,6 +555,7 @@ namespace ImplUcp {
 
 #ifndef UCP_TRANSMIT
         inline void X_PostWrite(UcpSeg *pSeg) noexcept {
+            assert(pSeg->vFlags(kubSegPsh));
             try {
                 x_vLower.Write<UcpSeg>(pSeg);
             }
@@ -549,9 +563,26 @@ namespace ImplUcp {
                 // just let the RDT handle this
             }
             catch (ExnIllegalState) {
-                // active shutdown
+                // just let the RDT handle this
             }
         }
+
+        inline void X_PostWrite(UpSeg upSeg) noexcept {
+            assert(!upSeg->vFlags(kubSegPsh));
+            auto pSeg = upSeg.release();
+            try {
+                x_vLower.Write<UcpSeg>(pSeg);
+            }
+            catch (ExnSockWrite<UcpSeg> &) {
+                // just let the RDT handle this
+                x_vPool.Delete(pSeg);
+            }
+            catch (ExnIllegalState) {
+                // just let the RDT handle this
+                x_vPool.Delete(pSeg);
+            }
+        }
+
 #else
         inline void X_PostTransmit() noexcept {
             try {
@@ -592,13 +623,13 @@ namespace ImplUcp {
         constexpr static U32 x_kuzAsmMax = 256 << 20;
         constexpr static U32 x_kucBuf = FloorPow2((16 << 20) / kuMss);
 
-        constexpr static U32 x_kubNeedAck = 0x00000002;  // payload received, ask received
-        constexpr static U32 x_kubNeedAsk = 0x00000004;  // rmt-rwnd = 0
-        constexpr static U32 x_kubDirty = 0x00000008;    // flush needed
-        constexpr static U32 x_kubAsking = 0x00000010;   // ask pending
-        constexpr static U32 x_kubEchoed = 0x00000020;   // anything received
-        constexpr static U32 x_kubConnLost = 0x40000000; // timedout exceeded
-        constexpr static U32 x_kubStopping = 0x80000000; // shutting down
+        constexpr static U32 x_kubAsking = 0x00000001;   // ask pending
+        constexpr static U32 x_kubConnLost = 0x00000002; // timedout exceeded
+        constexpr static U32 x_kubDirty = 0x00000004;    // flush needed
+        constexpr static U32 x_kubEchoed = 0x00000008;   // anything received
+        constexpr static U32 x_kubNeedAck = 0x00000010;  // payload received, ask received
+        constexpr static U32 x_kubNeedAsk = 0x00000020;  // rmt-rwnd = 0
+        constexpr static U32 x_kubStopping = 0x80000040; // shutting down
 
     private:
         Flags<U32> x_vState = 0;
@@ -613,21 +644,19 @@ namespace ImplUcp {
         U64 x_utSRtt = 0;          // SRTT in RFC6298
         U64 x_utRto = x_kutRtoMax; // RTO in RFC6298
 
-        U32 x_uzSsthresh = x_kuzSsthreshInit; // ssthresh in RFC5681
-        U32 x_uzCwnd = x_kuzCwndInit;         // cwnd in RFC5681
-        U32 x_ucRmtRwnd = x_kuzAsmMax / kuMss;   // rwnd of the other side, in mss-s
+        U32 x_uzSsthresh = x_kuzSsthreshInit;  // ssthresh in RFC5681
+        U32 x_uzCwnd = x_kuzCwndInit;          // cwnd in RFC5681
+        U32 x_uzFlight = 0;                    // FlightSize in RFC 5681
+        U32 x_ucRmtRwnd = x_kuzAsmMax / kuMss; // rwnd of the other side, in mss-s
 
         U32 x_unSndSeq = 0; // unSeq of the next segment to be put in x_qSnd
         U32 x_unSndAck = 0; // unSeq of the first segment of x_qSnd
         U32 x_unRcvSeq = 0; // expected unSeq of the next segment to be received
 
-        UcpBuffer x_qQue {x_vPool};
-
-        //SegQue x_qQue {}; // segments waiting to be sent, formed by fragmenting packets posted
-        SegQue x_qSnd {x_vPool}; // segments sent waiting for acknowledgement
-        SegQue x_qAsm {x_vPool}; // segments received and ordered, waiting to be reassemble to packets
-
-        UpSeg x_aqRcv[x_kucBuf] {};   // segments received, may not be correctly ordered
+        UcpBuffer x_qQue {x_vPool}; // segments waiting to be sent, formed by fragmenting packets posted
+        SegQue x_qSnd {x_vPool};    // segments sent waiting for acknowledgement
+        UpSeg x_aqRcv[x_kucBuf] {}; // segments received, may not be correctly ordered
+        SegQue x_qAsm {x_vPool};    // segments received and ordered, waiting to be reassemble to packets
 
         U32 x_uzRecv = 0;                   // bytes received in this second
         U32 x_uzSend = 0;                   // bytes sent in this second
@@ -635,8 +664,6 @@ namespace ImplUcp {
         std::atomic<U32> x_atmuzSend = 0;   // bytes sent in the last second
 
         std::atomic<U32> x_atmuzAsm = x_kuzAsmMax;   // available payload size in x_qAsm and qAsm-s
-        //std::atomic<U32> x_atmuzQue = 0;             // total payload size in x_qQue
-        U32 x_uzFlight = 0;                             // total bytes in x_qSnd
 
         std::vector<U32> x_vecSndSaks; // saks to be sent
 
