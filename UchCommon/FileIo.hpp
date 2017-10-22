@@ -140,7 +140,7 @@ private:
         if (dwRes)
             x_vUpper.OnRead(dwRes, 0, pChunk);
         else {
-            pChunk->Skip(uDone);
+            pChunk->IncWriter(uDone);
             x_vUpper.OnRead(0, uDone, pChunk);
         }
         X_EndIo();
@@ -151,7 +151,7 @@ private:
         if (dwRes)
             x_vUpper.OnWrite(dwRes, 0, std::unique_ptr<tChunk>(pChunk));
         else {
-            pChunk->Discard(uDone);
+            pChunk->IncReader(uDone);
             x_vUpper.OnWrite(0, uDone, std::unique_ptr<tChunk>(pChunk));
         }
         X_EndIo();

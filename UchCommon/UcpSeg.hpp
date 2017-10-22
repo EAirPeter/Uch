@@ -5,7 +5,6 @@
 #include "ByteChunk.hpp"
 #include "Flags.hpp"
 #include "Pool.hpp"
-#include "StaticChunk.hpp"
 
 namespace ImplUcp {
     //  0                   1                   2                   3
@@ -34,9 +33,10 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuMss = 65507;
+    constexpr static U32 kuMss = 1472;// 65507;
     constexpr static U32 kuShs = 12;
     constexpr static U32 kuMps = kuMss - kuShs;
+    constexpr static U32 kuMaxSaks = (kuMps - 1) / 3;
 
     constexpr bool SeqBefore(U32 unSub, U32 unObj) noexcept {
         return (unSub - unObj) & 0x01000000;
@@ -50,25 +50,23 @@ namespace ImplUcp {
         return (unSeq - ucHow) & 0x00ffffff;
     }
 
-    struct SegRecv {};
 
     constexpr U32 kubSegFrg = 0x01;
     constexpr U32 kubSegPsh = 0x02;
     constexpr U32 kubSegSak = 0x04;
     constexpr U32 kubSegAsk = 0x08;
 
-    struct UcpSeg : StaticChunk<kuMss>, IntrListNode<UcpSeg> {
-        static inline void *operator new(USize) noexcept {
-            return Pool<UcpSeg>::Instance().Alloc();
-        }
+    struct UcpSeg : ByteChunk<kuMss>, IntrListNode<UcpSeg> {
+        template<class tUpper>
+        friend class Ucp;
 
-        static inline void operator delete(void *pSeg) noexcept {
-            Pool<UcpSeg>::Instance().Dealloc(reinterpret_cast<UcpSeg *>(pSeg));
-        }
+    private:
+        struct SegRecv {};
 
-        inline UcpSeg() noexcept : StaticChunk(kuShs) {}
+    public:
+        inline UcpSeg() noexcept : ByteChunk(kuShs) {}
 
-        inline UcpSeg(SegRecv) noexcept : StaticChunk() {}
+        inline UcpSeg(SegRecv) noexcept : ByteChunk() {}
 
         inline UcpSeg(U32 unSeq_, U32 unAck_, U32 ucRwnd_, U32 uzData_, U32 ubFlags_) noexcept :
             unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), uzData(uzData_), vFlags(ubFlags_)
@@ -106,13 +104,13 @@ namespace ImplUcp {
             return kuShs + uzData;
         }
 
+    private:
         U32 unSeq;          // 24-bit sequence number
         U32 unAck;          // 24-bit acknowledgement number
         U32 ucRwnd;         // 16-bit size of sender's rwnd in count of mss-s
         U32 uzData;         // 12-bit count of saks or size of payload in bytes
         Flags<U32> vFlags;  // 8-bit fragment number
 
-        U64 uzIdx;          // index of the first byte
         U32 ucSent;         // sent count
         U32 ucTimedOut;     // timed out count
         U32 ucSkipped;      // skipped by sak count
@@ -121,9 +119,17 @@ namespace ImplUcp {
 
     };
 
-    using SegQue = IntrList<UcpSeg>;
+    using SegPool = Pool<UcpSeg>;
+    using SegQue = IntrList<UcpSeg, SegPool>;
+
+    struct UcpBuffer : ByteBuffer<UcpSeg, SegPool, kuMps> {
+        template<class tUpper>
+        friend class Ucp;
+
+        using ByteBuffer::ByteBuffer;
+
+    };
 
 }
 
-using UcpSeg = ImplUcp::UcpSeg;
-using UcpSegQue = ImplUcp::SegQue;
+using ImplUcp::UcpBuffer;

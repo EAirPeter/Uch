@@ -8,17 +8,28 @@
 #include "SockIo.hpp"
 #include "Sync.hpp"
 
-template<class tUpper>
+template<
+    class tUpper,
+    class tChunk = ByteChunk<4096>,
+    class tChunkPool = SysPool<tChunk>
+>
 class Pipeline {
-private:
+public:
     using Upper = tUpper;
     using Lower = SockIo<Pipeline>;
+
+    using Chunk = tChunk;
+    using ChunkPool = tChunkPool;
+    using UpChunk = typename ChunkPool::UniquePtr;
+    using Buffer = ByteBuffer<Chunk, ChunkPool>;
 
 public:
     Pipeline(const Pipeline &) = delete;
     Pipeline(Pipeline &&) = delete;
 
-    Pipeline(Upper &vUpper, SOCKET hSocket) : x_vUpper(vUpper), x_vLower(*this, hSocket) {}
+    Pipeline(Upper &vUpper, SOCKET hSocket, ChunkPool &vChunkPool) :
+        x_vUpper(vUpper), x_vLower(*this, hSocket), x_vPool(vChunkPool), x_vRecvBuf(x_vPool)
+    {}
 
     inline ~Pipeline() {
         RAII_LOCK(x_mtx);
@@ -34,6 +45,10 @@ public:
 
     constexpr Lower &GetLower() {
         return x_vLower;
+    }
+
+    constexpr ChunkPool &GetChunkPool() noexcept {
+        return x_vPool;
     }
 
 public:
@@ -58,14 +73,14 @@ public:
         x_vUpper.OnFinalize();
     }
 
-    void OnRead(DWORD dwError, U32 uDone, ByteChunk *pChunk) noexcept {
+    void OnRead(DWORD dwError, U32 uDone, Chunk *pChunk) noexcept {
         RAII_LOCK(x_mtx);
         if (dwError) {
-            x_vRecvBuf.EndRecv(0, pChunk);
+            x_vPool.Delete(pChunk);
             X_OnError(static_cast<int>(dwError));
             return;
         }
-        x_vRecvBuf.EndRecv(uDone, pChunk);
+        x_vRecvBuf.PushChunk(x_vPool.Wrap(pChunk));
         if (!uDone) {
             x_vUpper.OnPassivelyClose();
             x_vLower.Close();
@@ -89,27 +104,36 @@ public:
         X_PostRead();
     }
 
-    inline void OnWrite(DWORD dwError, U32 uDone, std::unique_ptr<ByteChunk> upChunk) {
+    inline void OnWrite(DWORD dwError, U32 uDone, Chunk *pChunk) {
         UNREFERENCED_PARAMETER(uDone);
-        UNREFERENCED_PARAMETER(upChunk);
+        x_vPool.Delete(pChunk);
         RAII_LOCK(x_mtx);
         if (dwError)
             X_OnError(static_cast<int>(dwError));
     }
 
-    void PostPacket(U16 uPakId, ByteBuffer &vPakBuf) {
-        vPakBuf.FormPacket(uPakId);
+    void PostPacket(U16 uPakId, Buffer &vPakBuf) {
+        auto uSize_ = vPakBuf.GetSize() + sizeof(U16);
+        auto uSize = static_cast<U16>(uSize_);
+        if (uSize != uSize_)
+            throw ExnArgTooLarge {uSize_, 65535};
+        auto upChunk = GetChunkPool().MakeUnique();
+        upChunk->Write(&uSize, sizeof(U16));
+        upChunk->Write(&uPakId, sizeof(U16));
+        vPakBuf.PrependChunk(std::move(upChunk));
         RAII_LOCK(x_mtx);
         try {
             while (!vPakBuf.IsEmpty())
-                x_vLower.Write(vPakBuf.PopChunk());
+                x_vLower.Write(vPakBuf.PopChunk().release());
         }
-        catch (ExnSockWrite<ByteChunk> &e) {
+        catch (ExnSockWrite<Chunk> &e) {
+            x_vPool.Delete(e.pChunk);
             X_OnError(e.nError);
         }
     }
 
-    inline void PostPacket(U16 uPakId, ByteBuffer &&vPakBuf) {
+    template<class tBuffer>
+    inline void PostPacket(U16 uPakId, tBuffer &&vPakBuf) {
         PostPacket(uPakId, vPakBuf);
     }
 
@@ -121,28 +145,31 @@ private:
     }
 
     inline void X_PostRead() noexcept {
-        auto pChunk = x_vRecvBuf.BeginRecv(x_uPakSize);
+        auto pChunk = x_vPool.New();
         try {
             x_vLower.PostRead(pChunk);
         }
-        catch (ExnSockRead<ByteChunk> &e) {
-            x_vRecvBuf.EndRecv(0, pChunk);
+        catch (ExnSockRead<Chunk> &e) {
+            x_vPool.Delete(pChunk);
             X_OnError(e.nError);
         }
         catch (ExnIllegalState) {
             // active shutdown
-            x_vRecvBuf.EndRecv(0, pChunk);
+            x_vPool.Delete(pChunk);
         }
     }
 
 private:
+    ChunkPool &x_vPool;
+
     Upper &x_vUpper;
     Lower x_vLower;
 
     RecursiveMutex x_mtx;
     bool x_bStopping = false;
 
-    ByteBuffer x_vRecvBuf;
+    Buffer x_vRecvBuf;
     U16 x_uPakSize = 0;
+
 
 };

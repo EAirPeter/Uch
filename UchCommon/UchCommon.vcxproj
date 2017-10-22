@@ -136,7 +136,6 @@
   <ItemGroup>
     <ClInclude Include="Flags.hpp" />
     <ClInclude Include="ByteBuffer.hpp" />
-    <ClInclude Include="ByteChunk.hpp" />
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="FileChunk.hpp" />
     <ClInclude Include="FileIo.hpp" />
@@ -148,7 +147,7 @@
     <ClInclude Include="Pipeline.hpp" />
     <ClInclude Include="SockIo.hpp" />
     <ClInclude Include="SockName.hpp" />
-    <ClInclude Include="StaticChunk.hpp" />
+    <ClInclude Include="ByteChunk.hpp" />
     <ClInclude Include="TestCommon.hpp" />
     <ClInclude Include="Debug.hpp" />
     <ClInclude Include="UcpSeg.hpp" />
@@ -156,7 +155,6 @@
     <ClInclude Include="Ucp.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ByteBuffer.cpp" />
     <ClCompile Include="Common.cpp" />
     <ClCompile Include="IoGroup.cpp" />
     <ClCompile Include="SockName.cpp" />

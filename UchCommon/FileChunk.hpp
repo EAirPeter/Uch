@@ -1,18 +1,13 @@
 #pragma once
 
-#include "StaticChunk.hpp"
+#include "ByteChunk.hpp"
 
 namespace ImplFileChunk {
     constexpr U32 kuSize = 16 << 20;
     constexpr USize kuAlign = 4 << 10;
 
-    struct FileChunk : StaticChunk<kuSize> {
+    struct FileChunk : ByteChunk<kuSize> {
         friend struct AlignHelper;
-
-        static inline void *operator new(USize) noexcept;
-
-        static inline void operator delete(void *pChunk) noexcept;
-
     };
 
     struct AlignHelper {
@@ -20,14 +15,6 @@ namespace ImplFileChunk {
     };
 
     using FileChunkPool = Pool<FileChunk, AlignHelper::kuAlignOff, kuAlign>;
-
-    inline void *FileChunk::operator new(USize) noexcept {
-        return FileChunkPool::Instance().Alloc();
-    }
-
-    inline void FileChunk::operator delete(void *pChunk) noexcept {
-        FileChunkPool::Instance().Dealloc(reinterpret_cast<FileChunk *>(pChunk));
-    }
 
 }
 

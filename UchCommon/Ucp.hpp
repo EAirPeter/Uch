@@ -6,7 +6,6 @@
 #include "ByteChunk.hpp"
 #include "IntrList.hpp"
 #include "SockIo.hpp"
-#include "StaticChunk.hpp"
 #include "Sync.hpp"
 #include "UcpSeg.hpp"
 
@@ -37,6 +36,8 @@ namespace ImplUcp {
         using Upper = tUpper;
         using Lower = SockIo<Ucp>;
 
+        using UpSeg = SegPool::UniquePtr;
+
     public:
         Ucp(const Ucp &) = delete;
         Ucp(Ucp &&) = delete;
@@ -60,19 +61,25 @@ namespace ImplUcp {
             return x_vLower;
         }
 
+    public:
         constexpr U32 GetQueueSize() noexcept {
-            return x_atmuzPak.load();
+            RAII_LOCK(x_mtx);
+            return x_qQue.GetSize();
         }
 
         constexpr U32 GetRwndSize() noexcept {
-            return x_atmuzRwnd.load();
+            return x_atmuzAsm.load();
         }
 
-        constexpr void FreeRwnd(U32 uzPak) noexcept {
-            x_atmuzRwnd.fetch_add((uzPak + kuMps) / kuMps * kuShs + uzPak + 1);
+        inline void EndOnPacket(U32 uzSize) noexcept {
+            x_atmuzAsm.fetch_add(uzSize);
         }
 
-     public:
+        inline UcpBuffer MakeBuffer() noexcept {
+            return {x_vPool};
+        }
+
+    public:
         inline void AssignToIoGroup(IoGroup &vIoGroup) {
             RAII_LOCK(x_mtx);
             x_vLower.AssignToIoGroup(vIoGroup);
@@ -80,13 +87,13 @@ namespace ImplUcp {
             vIoGroup.RegisterTick(*this);
             x_pIoGroup = &vIoGroup;
             for (DWORD i = 0; i < vIoGroup.GetThreads(); ++i)
-                X_PostRead(std::make_unique<UcpSeg>(SegRecv {}));
+                X_PostRead(x_vPool.MakeUnique(UcpSeg::SegRecv {}));
         }
 
         inline void Shutdown() noexcept {
             RAII_LOCK(x_mtx);
             x_vState += x_kubStopping;
-            if (!x_vState(x_kubNeedAck) && x_qPak.IsEmpty() && x_qSnd.IsEmpty())
+            if (!x_vState(x_kubNeedAck) && x_qQue.IsEmpty() && x_qSnd.IsEmpty())
                 x_vLower.Shutdown();
         }
 
@@ -107,7 +114,7 @@ namespace ImplUcp {
         }
 
         inline void OnRead(DWORD dwError, U32 uDone, UcpSeg *pSeg) {
-            auto upSeg = std::unique_ptr<UcpSeg>(pSeg);
+            auto upSeg = x_vPool.Wrap(pSeg);
             if (dwError) {
                 // just let the RDT handle this
                 ImplDbg::Println("read fail");
@@ -122,9 +129,9 @@ namespace ImplUcp {
             assert(uDone);
             assert(uDone == pSeg->GetReadable());
             pSeg->Decode();
-            auto upNewSeg = std::make_unique<UcpSeg>(SegRecv {});
+            auto upNewSeg = x_vPool.MakeUnique(UcpSeg::SegRecv {});
             U32 uzRwndAlloc;
-            SegQue qAsm;
+            SegQue qAsm(x_vPool);
             {
                 RAII_LOCK(x_mtx);
                 if (x_vState(x_kubConnLost))
@@ -132,13 +139,16 @@ namespace ImplUcp {
                 X_PostRead(std::move(upNewSeg));
                 uzRwndAlloc = X_InputSegment(qAsm, std::move(upSeg));
             }
-            x_atmuzRwnd.fetch_sub(uzRwndAlloc);
+            x_atmuzAsm.fetch_sub(uzRwndAlloc);
             while (!qAsm.IsEmpty()) {
-                auto pSeg = qAsm.GetHead();
-                while (pSeg->vFlags(kubSegFrg))
-                    pSeg = pSeg->GetNext();
-                auto qPak = qAsm.ExtractFromHeadTo(pSeg);
-                x_vUpper.OnSegs(qPak);
+                auto vBuf = MakeBuffer();
+                auto uzRwndAlloc = qAsm.GetHead()->GetSize();
+                vBuf.PushChunk(qAsm.PopHead());
+                while (vBuf.GetTail()->vFlags(kubSegFrg)) {
+                    uzRwndAlloc += qAsm.GetHead()->GetSize();
+                    vBuf.PushChunk(qAsm.PopHead());
+                }
+                x_vUpper.OnPacket(uzRwndAlloc, vBuf);
             }
         }
 
@@ -149,7 +159,7 @@ namespace ImplUcp {
             UNREFERENCED_PARAMETER(pSeg);
             // just let the RDT handle this
             if (!pSeg->uzData)
-                delete pSeg;
+                x_vPool.Delete(pSeg);
         }
 #else
         inline void OnTransmit(DWORD dwError, U32 uDone, ChunkIoContext *pCtx) {
@@ -163,10 +173,10 @@ namespace ImplUcp {
 #endif
 
         bool OnTick(U64 usNow) noexcept {
-            U32 uzQueFree = 0xffffffff;
+            bool bTsmAcq = false;
             {
                 RAII_LOCK(x_mtx);
-                if (x_vState(x_kubStopping) && x_qPak.IsEmpty() && x_qSnd.IsEmpty()) {
+                if (x_vState(x_kubStopping) && x_qQue.IsEmpty() && x_qSnd.IsEmpty()) {
                     x_vLower.Shutdown();
                     return false;
                 }
@@ -174,7 +184,7 @@ namespace ImplUcp {
                 if (StampDue(x_usNow, x_usSecond)) {
                     ImplDbg::Println(
                         "ssthresh = ", x_uzSsthresh, ", cwnd = ", x_uzCwnd,
-                        ", rwnd = ", x_atmuzRwnd.load(), ", xrwnd = ", x_ucRmtRwnd,
+                        ", rwnd = ", x_atmuzAsm.load(), ", xrwnd = ", x_ucRmtRwnd,
                         ", recv = ", x_uzRecv, ", send = ", x_uzSend
                     );
                     x_atmuzRecv = x_uzRecv;
@@ -186,7 +196,7 @@ namespace ImplUcp {
                 constexpr auto ubFlags = x_kubNeedAck | x_kubNeedAsk | x_kubDirty;
                 if (x_vState(ubFlags) || StampDue(x_usNow, x_usTimeout)) {
                     try {
-                        uzQueFree = X_Flush();
+                        bTsmAcq = X_Flush();
                     }
                     catch (ExnIllegalState) {
                         // connection lost
@@ -197,72 +207,37 @@ namespace ImplUcp {
                     }
                 }
             }
-            if (uzQueFree != 0xffffffff) {
-                x_atmuzPak.fetch_sub(uzQueFree & 0x7fffffff);
 #ifdef UCP_TRANSMIT
-                if (!(uzQueFree & 0x80000000)) {
-                    if (!x_vecTpes.empty())
-                        X_PostTransmit();
-                    else
-                        x_atmbTsm.clear();
-                }
-#endif
+            if (bTsmAcq) {
+                if (!x_vecTpes.empty())
+                    X_PostTransmit();
+                else
+                    x_atmbTsm.clear();
             }
+#endif
             return true;
         }
 
     public:
-        template<class tChunk = ByteChunk>
-        inline void PostPacket(Byte byPakId, ByteBuffer &vPakBuf, std::unique_ptr<tChunk> upOther = nullptr) {
-            auto uzQueAlloc = 1 + vPakBuf.GetSize();
-            SegQue qPak {};
-            qPak.PushTail(std::make_unique<UcpSeg>());
-            auto pSeg = qPak.GetTail();
-            pSeg->Write(&byPakId, 1);
-            while (!vPakBuf.IsEmpty()) {
-                auto upChunk = vPakBuf.PopChunk();
-                while (upChunk->IsReadable()) {
-                    if (!pSeg->IsWritable()) {
-                        pSeg->uzData = pSeg->GetReadable();
-                        pSeg->vFlags = kubSegFrg;
-                        qPak.PushTail(std::make_unique<UcpSeg>());
-                        pSeg = qPak.GetTail();
-                    }
-                    auto uToWrite = std::min(pSeg->GetWritable(), upChunk->GetReadable());
-                    pSeg->Write(upChunk->GetReader(), uToWrite);
-                    upChunk->Discard(uToWrite);
-                }
+        inline void PostPacket(UcpBuffer &qPak) {
+            for (auto pSeg = qPak.GetHead(); pSeg != qPak.GetNil(); pSeg = pSeg->GetNext()) {
+                pSeg->uzData = pSeg->GetReadable();
+                pSeg->vFlags = kubSegPsh | kubSegFrg;
             }
-            if (upOther) {
-                uzQueAlloc += upOther->GetReadable();
-                while (upOther->IsReadable()) {
-                    if (!pSeg->IsWritable()) {
-                        pSeg->uzData = pSeg->GetReadable();
-                        pSeg->vFlags = kubSegPsh | kubSegFrg;
-                        qPak.PushTail(std::make_unique<UcpSeg>());
-                        pSeg = qPak.GetTail();
-                    }
-                    auto uToWrite = std::min(pSeg->GetWritable(), upOther->GetReadable());
-                    pSeg->Write(upOther->GetReader(), uToWrite);
-                    upOther->Discard(uToWrite);
-                }
-            }
-            pSeg->uzData = pSeg->GetReadable();
-            pSeg->vFlags = kubSegPsh;
-            x_atmuzPak.fetch_add(uzQueAlloc);
+            qPak.GetTail()->vFlags = kubSegPsh;
             RAII_LOCK(x_mtx);
             if (x_vState(x_kubStopping))
                 throw ExnIllegalState {};
+            x_qQue.Splice(qPak);
             x_vState += x_kubDirty;
-            x_qPak.Splice(std::move(qPak));
         }
 
-        inline void PostPacket(Byte byPakId, ByteBuffer &&vPakBuf) {
-            PostPacket(byPakId, vPakBuf);
+        inline void PostPacket(UcpBuffer &&vBuf) {
+            PostPacket(vBuf);
         }
 
     private:
-        inline U32 X_InputSegment(SegQue &qAsm, std::unique_ptr<UcpSeg> upRcv) noexcept {
+        inline U32 X_InputSegment(SegQue &qAsm, UpSeg upRcv) noexcept {
             x_vState += x_kubEchoed;
             if (!upRcv->ucRwnd)
                 x_vState += x_kubNeedAsk;
@@ -278,10 +253,12 @@ namespace ImplUcp {
             U32 uzAcked = 0;
             auto pSnd = x_qSnd.GetHead();
             while (pSnd != x_qSnd.GetNil() && SeqBefore(pSnd->unSeq, upRcv->unAck)) {
+                assert(pSnd->ucSent);
                 X_UpdateRtt(pSnd);
                 uzAcked += pSnd->GetSize();
                 x_uzSend += pSnd->GetSize();
-                pSnd = pSnd->Remove()->GetNext();
+                x_qSnd.Remove(pSnd);
+                pSnd = x_qSnd.GetHead();
             }
             if (upRcv->vFlags(kubSegSak)) {
                 U64 usSakLatest = StampInfinite(x_usNow);
@@ -291,19 +268,22 @@ namespace ImplUcp {
                     while (pSnd != x_qSnd.GetNil() && SeqBefore(pSnd->unSeq, unSak))
                         pSnd = pSnd->GetNext();
                     if (pSnd != x_qSnd.GetNil() && pSnd->unSeq == unSak) {
+                        assert(pSnd->ucSent);
                         if (StampBefore(usSakLatest, pSnd->usSent))
                             usSakLatest = pSnd->usSent;
                         X_UpdateRtt(pSnd);
                         uzAcked += pSnd->GetSize();
                         x_uzSend += pSnd->GetSize();
-                        pSnd = pSnd->Remove()->GetNext();
+                        x_qSnd.Remove(pSnd);
+                        pSnd = x_qSnd.GetHead();
                     }
                     pSak += 3;
                 }
-                for (pSnd = x_qSnd.GetHead(); pSnd != x_qSnd.GetNil(); pSnd = pSnd->GetNext())
+                for (pSnd = x_qSnd.GetHead(); pSnd != x_qSnd.GetNil() && pSnd->ucSent; pSnd = pSnd->GetNext())
                     if (StampBefore(pSnd->usSent, usSakLatest))
                         ++pSnd->ucSkipped;
             }
+            x_uzFlight -= uzAcked;
             if (uzAcked) {
                 x_vState += x_kubDirty;
                 x_unSndAck = x_qSnd.IsEmpty() ? x_unSndSeq : x_qSnd.GetHead()->unSeq;
@@ -363,15 +343,15 @@ namespace ImplUcp {
             UCP_DBGOUT("srtt = ", x_utSRtt, ", rttvar = ", x_utRttVar, ", rto = ", x_utRto);
         }
 
-        inline U32 X_Flush() {
+        inline bool X_Flush() {
             UCP_DBGOUT("");
             X_PrepareSaks();
-            auto uzQueFree = X_PrepareQSnd();
+            X_PrepareQSnd();
 #ifdef UCP_TRANSMIT
             if (x_atmbTsm.test_and_set()) {
                 // lag
                 x_vState += x_kubDirty;
-                return uzQueFree | 0x80000000;
+                return false;
             }
 #endif
             x_vState -= x_kubDirty | x_kubEchoed;
@@ -381,7 +361,7 @@ namespace ImplUcp {
                     if (++x_ucAskTimedOut >= x_kucConnLost)
                         throw ExnIllegalState {};
                     x_vState += x_kubNeedAsk;
-                    x_utAskRto += x_utAskRto >> 1;
+                    x_utAskRto = std::min(x_kutRtoMax, x_utAskRto + (x_utAskRto >> 1));
                 }
                 else
                     x_vState -= x_kubNeedAsk;
@@ -396,30 +376,41 @@ namespace ImplUcp {
                 x_usTimeout = x_usAskTimeout;
             else
                 x_usTimeout = StampInfinite(x_usNow);
-            auto uzRwnd = x_atmuzRwnd.load();
+            auto uzRwnd = x_atmuzAsm.load();
             auto ucRwnd = uzRwnd & 0x80000000U ? 0 : uzRwnd / kuMss;
+            auto uzSwnd = std::min(x_uzCwnd, x_ucRmtRwnd * kuMss);
+            auto ucSaks = static_cast<U32>(x_vecSndSaks.size());
+            auto ucSakSegs = (ucSaks + kuMaxSaks - 1) / kuMaxSaks;
+            auto uzSakSegs = ucSakSegs * kuShs + ucSaks * 3;
+            auto uzPshSegs = uzSwnd > ucSakSegs ? uzSwnd - ucSakSegs : 0;
             bool bFastResend = false;
             bool bTimedOut = false;
-            auto uzRto = 0;
             for (auto pSeg = x_qSnd.GetHead(); pSeg != x_qSnd.GetNil(); pSeg = pSeg->GetNext()) {
+                if (pSeg->GetSize() > uzPshSegs) {
+                    if (StampBefore(pSeg->usTimeout, x_usTimeout))
+                        x_usTimeout = pSeg->usTimeout;
+                    continue;
+                }
                 if (!pSeg->ucSent) {
                     // first time
+                    x_uzFlight += pSeg->GetSize();
+                    uzPshSegs -= pSeg->GetSize();
                     X_FlushPayload(pSeg, ucRwnd);
                 }
                 else if (StampDue(x_usNow, pSeg->usTimeout)) {
                     // timed out
                     bTimedOut = true;
-                    uzRto += pSeg->GetSize();
                     if (x_vState(x_kubEchoed))
                         pSeg->ucTimedOut = 0;
                     else if (++pSeg->ucTimedOut >= x_kucConnLost)
                         throw ExnIllegalState {};
+                    uzPshSegs -= pSeg->GetSize();
                     X_FlushPayload(pSeg, ucRwnd);
                 }
                 else if (pSeg->ucSkipped >= x_kucFastResend) {
                     // fast resend
-                    uzRto += pSeg->GetSize();
                     bFastResend = true;
+                    uzPshSegs -= pSeg->GetSize();
                     X_FlushPayload(pSeg, ucRwnd);
                 }
                 if (StampBefore(pSeg->usTimeout, x_usTimeout))
@@ -429,25 +420,20 @@ namespace ImplUcp {
             // update cwnd and ssthresh according to RFC5681
             if (bTimedOut) {
                 ImplDbg::Println("timeout");
-                x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd - uzRto);
-                //x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd >> 1);
+                x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd >> 1);
                 x_uzCwnd = x_kuzCwndMin;
             }
             else if (bFastResend) {
                 ImplDbg::Println("resend");
-                //x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd - uzRto);
-                /*x_uzSsthresh = std::max(
-                    x_kuzSsthreshMin,
-                    (x_qSnd.IsEmpty() ? 0 : static_cast<U32>(x_uzSndIdx - x_qSnd.GetHead()->uzIdx)) >> 1
-                );*/
-                //x_uzCwnd = x_uzSsthresh + x_kucFastResend * kuMss;
+                x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzFlight >> 1);
+                x_uzCwnd = x_uzSsthresh + x_kucFastResend * kuMss;
             }
             UCP_DBGOUT(
                 "ssthresh = ", x_uzSsthresh, ", cwnd = ", x_uzCwnd,
-                ", rwnd = ", x_atmuzRwnd.load(), ", xrwnd = ", x_ucRmtRwnd,
+                ", rwnd = ", x_atmuzAsm.load(), ", xrwnd = ", x_ucRmtRwnd,
                 ", now = ", x_usNow, ", next_timeout = ", x_usTimeout
             );
-            return uzQueFree;
+            return true;
         }
 
         inline void X_PrepareSaks() noexcept {
@@ -462,26 +448,16 @@ namespace ImplUcp {
             UCP_DBGOUT("saks = ", x_vecSndSaks);
         }
 
-        inline U32 X_PrepareQSnd() noexcept {
-            auto uzSwnd = std::min(x_uzCwnd, x_ucRmtRwnd * kuMss);
-            auto uzBound = (x_qSnd.IsEmpty() ? x_uzSndIdx : x_qSnd.GetHead()->uzIdx) + uzSwnd;
+        inline void X_PrepareQSnd() noexcept {
             auto unBound = SeqIncrease(x_unSndAck, x_kucBuf);
-            U32 uzQueFree = 0;
-            while (!x_qPak.IsEmpty() && SeqBefore(x_unSndSeq, unBound) && x_uzSndIdx + x_qPak.GetHead()->GetSize() <= uzBound) {
-                auto upSeg = x_qPak.PopHead();
+            while (!x_qQue.IsEmpty() && SeqBefore(x_unSndSeq, unBound)) {
+                auto upSeg = x_qQue.PopChunk();
                 upSeg->unSeq = std::exchange(x_unSndSeq, SeqIncrease(x_unSndSeq));
-                upSeg->uzIdx = x_uzSndIdx;
                 upSeg->ucSent = 0;
                 upSeg->ucTimedOut = 0;
-                x_uzSndIdx += upSeg->GetSize();
-                uzQueFree += upSeg->uzData;
                 x_qSnd.PushTail(std::move(upSeg));
             }
-            UCP_DBGOUT(
-                "qsnd.begin = ", uzBound - x_uzCwnd, ", qsnd.end = ", x_uzSndIdx,
-                ", bound = ", uzBound
-            );
-            return uzQueFree;
+            UCP_DBGOUT("flight = ", x_uzFlight);
         }
 
         inline void X_FlushPayload(UcpSeg *pSeg, U32 ucRwnd) noexcept {
@@ -510,7 +486,7 @@ namespace ImplUcp {
                     auto uSaksToSend = std::min((kuMss - kuShs) / 3, static_cast<U32>(x_vecSndSaks.size()));
                     auto ubFlags = kubSegSak | (x_vState(x_kubNeedAsk) ? kubSegAsk : 0);
                     x_vState -= x_kubNeedAsk;
-                    auto upSeg = std::make_unique<UcpSeg>(0, x_unRcvSeq, ucRwnd, uSaksToSend, ubFlags);
+                    auto upSeg = x_vPool.MakeUnique(0, x_unRcvSeq, ucRwnd, uSaksToSend, ubFlags);
                     UCP_DBGOUT("saks = ", uSaksToSend);
                     while (uSaksToSend--) {
                         upSeg->Write(&x_vecSndSaks.back(), 3);
@@ -527,7 +503,7 @@ namespace ImplUcp {
             else if (x_vState(x_kubNeedAck | x_kubNeedAsk)) {
                 auto ubFlags = x_vState(x_kubNeedAsk) ? kubSegAsk : 0;
                 x_vState -= x_kubNeedAck | x_kubNeedAsk;
-                auto upSeg = std::make_unique<UcpSeg>(0, x_unRcvSeq, ucRwnd, 0, ubFlags);
+                auto upSeg = x_vPool.MakeUnique(0, x_unRcvSeq, ucRwnd, 0, ubFlags);
                 UCP_DBGOUT("ack = ", x_unRcvSeq);
 #ifndef UCP_TRANSMIT
                 X_PostWrite(upSeg.release());
@@ -548,7 +524,7 @@ namespace ImplUcp {
 #endif
 
     private:
-        inline void X_PostRead(std::unique_ptr<UcpSeg> upSeg) noexcept {
+        inline void X_PostRead(UpSeg upSeg) noexcept {
             upSeg->ToBegin();
             auto pSeg = upSeg.release();
             try {
@@ -556,11 +532,11 @@ namespace ImplUcp {
             }
             catch (ExnSockRead<UcpSeg> &) {
                 // just let the RDT handle this
-                delete pSeg;
+                x_vPool.Delete(pSeg);
             }
             catch (ExnIllegalState) {
                 // active shutdown
-                delete pSeg;
+                x_vPool.Delete(pSeg);
             }
         }
 
@@ -588,6 +564,8 @@ namespace ImplUcp {
 #endif
 
     private:
+        SegPool x_vPool;
+
         Upper &x_vUpper;
         Lower x_vLower;
 
@@ -597,7 +575,7 @@ namespace ImplUcp {
 #ifdef UCP_TRANSMIT
         ChunkIoContext x_vTsmCtx {};
         std::vector<TRANSMIT_PACKETS_ELEMENT> x_vecTpes;
-        std::vector<std::unique_ptr<UcpSeg>> x_vecTmpSegs;
+        std::vector<UpSeg> x_vecTmpSegs;
         std::atomic_flag x_atmbTsm {};
 #endif
 
@@ -611,7 +589,7 @@ namespace ImplUcp {
         constexpr static U32 x_kuzSsthreshMin = 2 * kuMss;
         constexpr static U32 x_kuzCwndMin = 1 * kuMss;
         constexpr static U32 x_kuzCwndInit = 3 * kuMss;
-        constexpr static U32 x_kuzRwndMax = 256 << 20;
+        constexpr static U32 x_kuzAsmMax = 256 << 20;
         constexpr static U32 x_kucBuf = FloorPow2((16 << 20) / kuMss);
 
         constexpr static U32 x_kubNeedAck = 0x00000002;  // payload received, ask received
@@ -626,6 +604,10 @@ namespace ImplUcp {
         Flags<U32> x_vState = 0;
         U64 x_usNow = 0;         // last tick time
         U64 x_usTimeout = 0;     // next time for resend
+        U64 x_usSecond = 0;      // the end of this second
+        U64 x_usAskTimeout = 0;
+        U64 x_utAskRto = 0;
+        U32 x_ucAskTimedOut = 0;
 
         U64 x_utRttVar = 0;        // RTTVAR in RFC6298
         U64 x_utSRtt = 0;          // SRTT in RFC6298
@@ -633,31 +615,28 @@ namespace ImplUcp {
 
         U32 x_uzSsthresh = x_kuzSsthreshInit; // ssthresh in RFC5681
         U32 x_uzCwnd = x_kuzCwndInit;         // cwnd in RFC5681
-        U32 x_ucRmtRwnd = x_kuzRwndMax / kuMss;  // rwnd of the other side, in mss-s
-        std::atomic<U32> x_atmuzRwnd = x_kuzRwndMax;   // rwnd
-
-        U64 x_usAskTimeout = 0;
-        U64 x_utAskRto = 0;
-        U32 x_ucAskTimedOut = 0;
+        U32 x_ucRmtRwnd = x_kuzAsmMax / kuMss;   // rwnd of the other side, in mss-s
 
         U32 x_unSndSeq = 0; // unSeq of the next segment to be put in x_qSnd
         U32 x_unSndAck = 0; // unSeq of the first segment of x_qSnd
         U32 x_unRcvSeq = 0; // expected unSeq of the next segment to be received
 
-        SegQue x_qPak {}; // segments waiting to be sent, formed by fragmenting packets posted
-        SegQue x_qSnd {}; // segments sent waiting for acknowledgement
-        SegQue x_qAsm {}; // segments received and ordered, waiting to be reassemble to packets
+        UcpBuffer x_qQue {x_vPool};
+
+        //SegQue x_qQue {}; // segments waiting to be sent, formed by fragmenting packets posted
+        SegQue x_qSnd {x_vPool}; // segments sent waiting for acknowledgement
+        SegQue x_qAsm {x_vPool}; // segments received and ordered, waiting to be reassemble to packets
+
+        UpSeg x_aqRcv[x_kucBuf] {};   // segments received, may not be correctly ordered
 
         U32 x_uzRecv = 0;                   // bytes received in this second
         U32 x_uzSend = 0;                   // bytes sent in this second
         std::atomic<U32> x_atmuzRecv = 0;   // bytes received in the last second
         std::atomic<U32> x_atmuzSend = 0;   // bytes sent in the last second
-        U64 x_usSecond = 0;                 // the end of this second
 
-        std::unique_ptr<UcpSeg> x_aqRcv[x_kucBuf];   // segments received, may not be correctly ordered
-
-        std::atomic<U32> x_atmuzPak = 0;    // total payload size in x_qPak
-        U64 x_uzSndIdx = 0; // index of the byte at the end of x_qSnd increased by 1
+        std::atomic<U32> x_atmuzAsm = x_kuzAsmMax;   // available payload size in x_qAsm and qAsm-s
+        //std::atomic<U32> x_atmuzQue = 0;             // total payload size in x_qQue
+        U32 x_uzFlight = 0;                             // total bytes in x_qSnd
 
         std::vector<U32> x_vecSndSaks; // saks to be sent
 

@@ -2,12 +2,15 @@
 
 #include "Common.hpp"
 
-template<class tElem>
+#include "Pool.hpp"
+
+template<class tElem, class tElemPool>
 class IntrList;
 
 template<class tElem>
 class IntrListNode {
-    friend IntrList<tElem>;
+    template<class tElem, class tElemPool>
+    friend class IntrList;
 
     static_assert(!std::is_const_v<tElem>, "const");
 
@@ -40,23 +43,6 @@ public:
         return static_cast<const Element *>(x_pNext);
     }
 
-    constexpr std::unique_ptr<Element> Remove() noexcept {
-        X_Link(x_pPrev, x_pNext);
-        return std::unique_ptr<Element>(static_cast<Element *>(this));
-    }
-
-    constexpr void InsertBefore(std::unique_ptr<Element> upNew) noexcept {
-        auto pNew = upNew.release();
-        X_Link(x_pPrev, pNew);
-        X_Link(pNew, this);
-    }
-
-    constexpr void InsertAfter(std::unique_ptr<Element> upNew) noexcept {
-        auto pNew = upNew.release();
-        X_Link(pNew, x_pNext);
-        X_Link(this, pNew);
-    }
-
 private:
     constexpr IntrListNode(IntrListNode *pPrev, IntrListNode *pNext) noexcept : x_pPrev(pPrev), x_pNext(pNext) {}
 
@@ -71,10 +57,12 @@ private:
 
 };
 
-template<class tElem>
+template<class tElem, class tElemPool = SysPool<tElem>>
 class IntrList {
 public:
     using Element = tElem;
+    using ElemPool = tElemPool;
+    using UpElem = typename ElemPool::UniquePtr;
 
 protected:
     using Node = IntrListNode<Element>;
@@ -82,8 +70,9 @@ protected:
     static_assert(std::is_base_of_v<Node, Element>, "derivation");
 
 public:
-    constexpr IntrList() noexcept = default;
+    constexpr IntrList(ElemPool &vPool) noexcept : x_pPool(&vPool) {}
 
+    IntrList() = delete;
     IntrList(const IntrList &) = delete;
 
     constexpr IntrList(IntrList &&vList) noexcept {
@@ -93,7 +82,7 @@ public:
     ~IntrList() {
         auto pNode = X_Head();
         while (pNode != X_Nil())
-            delete static_cast<Element *>(std::exchange(pNode, pNode->x_pNext));
+            x_pPool->Delete(static_cast<Element *>(std::exchange(pNode, pNode->x_pNext)));
     }
 
     IntrList &operator =(const IntrList &) = delete;
@@ -118,6 +107,8 @@ public:
             Node::X_Link(vList.X_Nil(), pHead);
             Node::X_Link(pTail, vList.X_Nil());
         }
+        using std::swap;
+        swap(x_pPool, vList.x_pPool);
     }
 
     friend constexpr void swap(IntrList &vLhs, IntrList &vRhs) noexcept {
@@ -125,6 +116,10 @@ public:
     }
 
 public:
+    constexpr ElemPool &GetElemPool() const noexcept {
+        return *const_cast<ElemPool *>(x_pPool);
+    }
+
     constexpr bool IsEmpty() const noexcept {
         return X_Head() == X_Nil();
     }
@@ -168,26 +163,43 @@ public:
     constexpr void Clear() noexcept {
         auto pNode = X_Head();
         while (pNode != X_Nil())
-            delete static_cast<Element *>(std::exchange(pNode, pNode->x_pNext));
+            x_pPool->Delete(static_cast<Element *>(std::exchange(pNode, pNode->x_pNext)));
         Node::X_Link(X_Nil(), X_Nil());
     }
 
-    constexpr void PushHead(std::unique_ptr<Element> upElem) noexcept {
-        X_Nil()->InsertAfter(std::move(upElem));
+    constexpr void PushHead(UpElem upElem) noexcept {
+        InsertAfter(GetNil(), std::move(upElem));
     }
 
-    constexpr void PushTail(std::unique_ptr<Element> upElem) noexcept {
-        X_Nil()->InsertBefore(std::move(upElem));
-    }
-
-    // unchecked
-    constexpr std::unique_ptr<Element> PopHead() noexcept {
-        return X_Head()->Remove();
+    constexpr void PushTail(UpElem upElem) noexcept {
+        InsertBefore(GetNil(), std::move(upElem));
     }
 
     // unchecked
-    constexpr std::unique_ptr<Element> PopTail() noexcept {
-        return X_Tail()->Remove();
+    constexpr UpElem PopHead() noexcept {
+        return Remove(GetHead());
+    }
+
+    // unchecked
+    constexpr UpElem PopTail() noexcept {
+        return Remove(GetTail());
+    }
+
+    constexpr static void InsertAfter(Element *pHint, UpElem upNew) noexcept {
+        auto pNew = upNew.release();
+        Node::X_Link(pNew, pHint->Node::x_pNext);
+        Node::X_Link(pHint, pNew);
+    }
+
+    constexpr static void InsertBefore(Element *pHint, UpElem upNew) noexcept {
+        auto pNew = upNew.release();
+        Node::X_Link(pHint->Node::x_pPrev, pNew);
+        Node::X_Link(pNew, pHint);
+    }
+
+    constexpr UpElem Remove(Element *pElem) noexcept {
+        Node::X_Link(pElem->Node::x_pPrev, pElem->Node::x_pNext);
+        return x_pPool->Wrap(pElem);
     }
 
 public:
@@ -206,17 +218,19 @@ public:
     constexpr IntrList ExtractFromHeadTo(Element *pTail) noexcept {
         auto pHead = GetHead();
         Node::X_Link(X_Nil(), pTail->Node::x_pNext);
-        return IntrList(pHead, pTail);
+        return {pHead, pTail, x_pPool};
     }
 
     constexpr IntrList ExtractToTailFrom(Element *pHead) noexcept {
         auto pTail = GetTail();
         Node::X_Link(pHead->Node::x_pPrev, X_Nil());
-        return IntrList(pHead, pTail);
+        return {pHead, pTail, x_pPool};
     }
 
 private:
-    constexpr IntrList(Element *pHead, Element *pTail) noexcept : x_vNil(pTail, pHead) {
+    constexpr IntrList(Element *pHead, Element *pTail, ElemPool *pPool) noexcept :
+        x_vNil(pTail, pHead), x_pPool(pPool)
+    {
         pHead->Node::x_pPrev = &x_vNil;
         pTail->Node::x_pNext = &x_vNil;
     }
@@ -247,5 +261,6 @@ private:
 
 private:
     Node x_vNil {&x_vNil, &x_vNil};
+    ElemPool *x_pPool;
 
 };

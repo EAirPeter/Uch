@@ -33,9 +33,6 @@
     <ClInclude Include="Uftp.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ByteChunk.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="IntrList.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -46,9 +43,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Ucp.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="StaticChunk.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IoGroup.hpp">
@@ -78,11 +72,11 @@
     <ClInclude Include="Flags.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ByteChunk.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ByteBuffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Common.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
