@@ -4,8 +4,6 @@
 #define NDEBUG
 #endif
 
-#pragma comment(lib, "ws2_32.lib")
-
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 

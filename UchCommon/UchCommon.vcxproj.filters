@@ -30,9 +30,6 @@
     <ClInclude Include="SockName.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Uftp.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="IntrList.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>

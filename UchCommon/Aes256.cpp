@@ -2,8 +2,6 @@
 
 #include "Aes256.hpp"
 
-#pragma comment(lib, "intel_aes.lib")
-
 #include <iaes_asm_interface.h>
 
 Aes256::Aes256(const void *pKey, U64 uInitialCounter) noexcept : x_uInitialCounter(uInitialCounter) {
