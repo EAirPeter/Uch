@@ -75,6 +75,9 @@
     <ClInclude Include="ByteChunk.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Aes256.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Common.cpp">
@@ -87,6 +90,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="IoGroup.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Aes256.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
