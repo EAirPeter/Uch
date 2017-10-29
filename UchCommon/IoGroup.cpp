@@ -2,8 +2,7 @@
 
 #include "ByteChunk.hpp"
 #include "IoGroup.hpp"
-
-#include "Debug.hpp"
+#include "System.hpp"
 
 void IoGroup::Start() {
     if (x_pTpPool)
@@ -77,10 +76,8 @@ VOID IoGroup::X_TpcbOnTimer(
     UNREFERENCED_PARAMETER(pTpTimer);
     auto pCtx = reinterpret_cast<X_TpTimerContext *>(pParam);
     auto usNow = GetTimeStamp();
-    if (!pCtx->mtx.TryAcquire()) { // lag
-        DBG_PRINTLN("lag");
+    if (!pCtx->mtx.TryAcquire())
         return;
-    }
     RAII_LOCK_ACQUIRED(pCtx->mtx);
     for (auto it = pCtx->liTickCtxs.begin(); it != pCtx->liTickCtxs.end(); ) {
         if (it->pfnOnTick(it->pObj, usNow))

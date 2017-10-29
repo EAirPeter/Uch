@@ -150,11 +150,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="Aes256.hpp" />
+    <ClInclude Include="AlignedStorage.hpp" />
+    <ClInclude Include="Crypto.hpp" />
+    <ClInclude Include="EventBase.hpp" />
+    <ClInclude Include="EventBus.hpp" />
+    <ClInclude Include="GenSingleton.inl" />
+    <ClInclude Include="System.hpp" />
+    <ClInclude Include="Config.hpp" />
+    <ClInclude Include="String.hpp" />
     <ClInclude Include="Flags.hpp" />
     <ClInclude Include="ByteBuffer.hpp" />
     <ClInclude Include="Common.hpp" />
-    <ClInclude Include="FileChunk.hpp" />
     <ClInclude Include="FileIo.hpp" />
     <ClInclude Include="IoGroup.hpp" />
     <ClInclude Include="IntrList.hpp" />
@@ -163,7 +169,7 @@
     <ClInclude Include="Sync.hpp" />
     <ClInclude Include="Pipeline.hpp" />
     <ClInclude Include="SockIo.hpp" />
-    <ClInclude Include="SockName.hpp" />
+    <ClInclude Include="Wsa.hpp" />
     <ClInclude Include="ByteChunk.hpp" />
     <ClInclude Include="TestCommon.hpp" />
     <ClInclude Include="Debug.hpp" />
@@ -171,11 +177,15 @@
     <ClInclude Include="Ucp.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Aes256.cpp" />
-    <ClCompile Include="Common.cpp" />
+    <ClCompile Include="System.cpp" />
+    <ClCompile Include="Config.cpp" />
+    <ClCompile Include="String.cpp" />
     <ClCompile Include="IoGroup.cpp" />
-    <ClCompile Include="SockName.cpp" />
+    <ClCompile Include="Wsa.cpp" />
     <ClCompile Include="TestCommon.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GenEvent.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

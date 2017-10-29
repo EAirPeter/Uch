@@ -3,8 +3,8 @@
 #include "Common.hpp"
 
 #include "IoGroup.hpp"
-#include "SockName.hpp"
 #include "Sync.hpp"
+#include "Wsa.hpp"
 
 template<class tUpper, class tPipl>
 class Listener {
@@ -13,11 +13,11 @@ public:
     using Pipl = tPipl;
 
 public:
-    Listener(Upper &vUpper, const SockName &vSnListen, int nMaxConn) :
+    Listener(Upper &vUpper, SOCKET hSocket, int nBacklog) :
         x_vUpper(vUpper),
-        x_hSocket(CreateTcpSocket()),
-        x_vSnListen(vSnListen),
-        x_nMaxConn(nMaxConn)
+        x_hSocket(hSocket),
+        x_nBacklog(nBacklog),
+        x_vSnListen(::GetLocalSockName(x_hSocket))
     {
         int nRes;
         x_hEvent = WSACreateEvent();
@@ -27,13 +27,6 @@ public:
             throw ExnWsa(nRes);
         }
         nRes = WSAEventSelect(x_hSocket, x_hEvent, FD_ACCEPT);
-        if (nRes) {
-            nRes = WSAGetLastError();
-            WSACloseEvent(x_hEvent);
-            closesocket(x_hSocket);
-            throw ExnWsa(nRes);
-        }
-        nRes = bind(x_hSocket, &x_vSnListen.vSockAddr, static_cast<int>(x_vSnListen.nSockLen));
         if (nRes) {
             nRes = WSAGetLastError();
             WSACloseEvent(x_hEvent);
@@ -63,7 +56,7 @@ public:
 public:
     void AssignToIoGroup(IoGroup &vIoGroup) {
         RAII_LOCK(x_mtx);
-        auto nRes = listen(x_hSocket, x_nMaxConn);
+        auto nRes = listen(x_hSocket, x_nBacklog);
         if (nRes)
             throw ExnWsa();
         vIoGroup.RegisterNetev(*this, x_hSocket, x_hEvent);
@@ -123,8 +116,8 @@ private:
 
     SOCKET x_hSocket;
     WSAEVENT x_hEvent;
+    int x_nBacklog;
     const SockName x_vSnListen;
-    const int x_nMaxConn;
 
     std::unordered_map<SOCKET, std::unique_ptr<Pipl>> x_mapPipls;
 

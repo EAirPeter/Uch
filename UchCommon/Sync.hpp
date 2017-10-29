@@ -124,6 +124,57 @@ private:
 
 };
 
+class RWLock : public Mutex {
+public:
+    using ReadLock = RWLock;
+    using WriteLock = Mutex;
+
+public:
+    using Mutex::Mutex;
+
+#ifndef NDEBUG
+    inline ~RWLock() {
+        assert(!d_atmnCount.load());
+    }
+#endif
+
+    RWLock &operator =(const RWLock &) = delete;
+    RWLock &operator =(RWLock &&) = delete;
+
+public:
+    inline void Acquire() noexcept {
+        AcquireSRWLockShared(Mutex::GetNative());
+        assert(d_atmnCount.fetch_add(1) >= 0);
+    }
+
+    inline bool TryAcquire() noexcept {
+        auto bRes = TryAcquireSRWLockShared(Mutex::GetNative());
+        assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
+        return bRes;
+    }
+
+    inline void Release() noexcept {
+        assert(d_atmnCount.fetch_sub(1) > 0);
+        ReleaseSRWLockShared(Mutex::GetNative());
+    }
+
+public:
+    constexpr ReadLock &GetReadLock() noexcept {
+        return *this;
+    }
+
+    constexpr WriteLock &GetWriteLock() noexcept {
+        return *static_cast<Mutex *>(this);
+    }
+
+#ifndef NDEBUG
+private:
+    std::atomic<I64> d_atmnCount = 0;
+#endif
+
+};
+
+/*
 class RWLock {
 public:
     class ReadLock {
@@ -246,7 +297,7 @@ private:
     WriteLock x_vWLock {*this};
     SRWLOCK x_vSrwl = SRWLOCK_INIT;
 
-};
+};*/
 
 class ConditionVariable {
 public:

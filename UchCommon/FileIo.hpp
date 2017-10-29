@@ -6,13 +6,7 @@
 #include "IoGroup.hpp"
 
 template<class tChunk>
-struct ExnFileRead {
-    DWORD dwError;
-    tChunk *pChunk;
-};
-
-template<class tChunk>
-struct ExnFileWrite {
+struct ExnFileIo {
     DWORD dwError;
     tChunk *pChunk;
 };
@@ -86,7 +80,7 @@ public:
             if (dwError != ERROR_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndIo();
-                throw ExnFileRead<tChunk> {dwError, pChunk};
+                throw ExnFileIo<tChunk> {dwError, pChunk};
             }
         }
     }
@@ -107,7 +101,7 @@ public:
             if (dwError != ERROR_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndIo();
-                throw ExnFileWrite<tChunk> {dwError, pChunk};
+                throw ExnFileIo<tChunk> {dwError, pChunk};
             }
         }
     }

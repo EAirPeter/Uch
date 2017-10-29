@@ -4,17 +4,11 @@
 #include "ByteBuffer.hpp"
 #include "ByteChunk.hpp"
 #include "IoGroup.hpp"
-#include "SockName.hpp"
 #include "Sync.hpp"
+#include "Wsa.hpp"
 
 template<class tChunk>
-struct ExnSockRead {
-    int nError;
-    tChunk *pChunk;
-};
-
-template<class tChunk>
-struct ExnSockWrite {
+struct ExnSockIo {
     int nError;
     tChunk *pChunk;
 };
@@ -105,7 +99,7 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndRecv();
-                throw ExnSockRead<tChunk> {nRes, pChunk};
+                throw ExnSockIo<tChunk> {nRes, pChunk};
             }
         }
     }
@@ -129,7 +123,7 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndSend();
-                throw ExnSockWrite<tChunk> {nRes, pChunk};
+                throw ExnSockIo<tChunk> {nRes, pChunk};
             }
         }
     }
@@ -142,7 +136,7 @@ public:
             X_EndSend();
             throw ExnIllegalState {};
         }
-        auto dwbRes = Wsimp::TransmitPackets(
+        auto dwbRes = wsaimp::TransmitPackets(
             x_hSocket, pPaks, static_cast<DWORD>(ucPaks),
             static_cast<DWORD>(uzMss), pCtx, TF_USE_KERNEL_APC
         );
@@ -151,7 +145,7 @@ public:
             if (nRes != WSA_IO_PENDING) {
                 CancelThreadpoolIo(x_pTpIo);
                 X_EndSend();
-                throw ExnSockWrite<ChunkIoContext> {nRes, pCtx};
+                throw ExnSockIo<ChunkIoContext> {nRes, pCtx};
             }
         }
     }

@@ -12,6 +12,9 @@ public:
 
 private:
     void X_OnLogin();
+    void X_OnQuit();
+    void X_OnRegister();
+    void X_OnForget();
 
 private:
     nana::place x_pl {*this};
@@ -19,8 +22,6 @@ private:
     nana::button x_btnQuit {*this};
     nana::button x_btnRegister {*this};
     nana::button x_btnForget {*this};
-    nana::textbox x_txtServerHost {*this};
-    nana::textbox x_txtServerPort {*this};
     nana::textbox x_txtUsername {*this};
     nana::textbox x_txtPassword {*this};
 

@@ -1,96 +1,125 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
-      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
-      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    <Filter Include="Util">
+      <UniqueIdentifier>{f4b64f6c-7eb1-40df-8449-e05fb1f6bb00}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    <Filter Include="Buffer">
+      <UniqueIdentifier>{6089699b-c399-44a8-9cfe-e994f742e30c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    <Filter Include="Basis">
+      <UniqueIdentifier>{9e0c5f6f-3907-441f-a381-7565b1286325}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Test Files">
+    <Filter Include="Io">
+      <UniqueIdentifier>{339a0dcc-f197-45fb-b0fe-8768a3656ada}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Debug">
       <UniqueIdentifier>{a66fcce2-16d7-49f2-8bc5-456e83520704}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Event">
+      <UniqueIdentifier>{bff1df23-316c-4e63-9be1-32bf2fcb1b5d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ByteBuffer.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Common.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="TestCommon.hpp">
-      <Filter>Test Files</Filter>
+      <Filter>Debug</Filter>
     </ClInclude>
-    <ClInclude Include="SockName.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IntrList.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Pipeline.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SockIo.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Ucp.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IoGroup.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Sync.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Listener.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Debug.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FileIo.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="UcpSeg.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Pool.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FileChunk.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Flags.hpp">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="ByteBuffer.hpp">
+      <Filter>Buffer</Filter>
     </ClInclude>
     <ClInclude Include="ByteChunk.hpp">
-      <Filter>Header Files</Filter>
+      <Filter>Buffer</Filter>
     </ClInclude>
-    <ClInclude Include="Aes256.hpp">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Common.hpp">
+      <Filter>Basis</Filter>
+    </ClInclude>
+    <ClInclude Include="Config.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Debug.hpp">
+      <Filter>Debug</Filter>
+    </ClInclude>
+    <ClInclude Include="FileIo.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="IntrList.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Flags.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="IoGroup.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Listener.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Pool.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="SockIo.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Pipeline.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="Sync.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Ucp.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="UcpSeg.hpp">
+      <Filter>Io</Filter>
+    </ClInclude>
+    <ClInclude Include="System.hpp">
+      <Filter>Basis</Filter>
+    </ClInclude>
+    <ClInclude Include="Wsa.hpp">
+      <Filter>Basis</Filter>
+    </ClInclude>
+    <ClInclude Include="Crypto.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="GenSingleton.inl">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="AlignedStorage.hpp">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="EventBase.hpp">
+      <Filter>Event</Filter>
+    </ClInclude>
+    <ClInclude Include="EventBus.hpp">
+      <Filter>Event</Filter>
+    </ClInclude>
+    <ClInclude Include="String.hpp">
+      <Filter>Util</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Common.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="TestCommon.cpp">
-      <Filter>Test Files</Filter>
+      <Filter>Debug</Filter>
     </ClCompile>
-    <ClCompile Include="SockName.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="Config.cpp">
+      <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="IoGroup.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Io</Filter>
     </ClCompile>
-    <ClCompile Include="Aes256.cpp">
-      <Filter>Source Files</Filter>
+    <ClCompile Include="System.cpp">
+      <Filter>Basis</Filter>
     </ClCompile>
+    <ClCompile Include="Wsa.cpp">
+      <Filter>Basis</Filter>
+    </ClCompile>
+    <ClCompile Include="String.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GenEvent.inl">
+      <Filter>Event</Filter>
+    </None>
   </ItemGroup>
 </Project>

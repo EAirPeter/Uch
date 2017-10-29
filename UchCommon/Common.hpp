@@ -17,7 +17,6 @@
 
 #include <MSWSock.h>
 
-#include <intrin.h>
 #include <malloc.h>
 
 #include <algorithm>
@@ -41,6 +40,20 @@
 #define CONCAT_(a_, b_) a_##b_
 #define CONCAT(a_, b_) CONCAT_(a_, b_)
 
+#define REQUIRES(...) std::enable_if_t<__VA_ARGS__, int> = 0
+
+#define BUFOPR(type_) \
+    template<class tBuffer> \
+    inline tBuffer &operator >>(tBuffer &vBuf, type_ &vObj) noexcept { \
+        vBuf.ReadBytes(&vObj, static_cast<U32>(sizeof(type_))); \
+        return vBuf; \
+    } \
+    template<class tBuffer> \
+    inline tBuffer &operator <<(tBuffer &vBuf, const type_ &vObj) noexcept { \
+        vBuf.WriteBytes(&vObj, static_cast<U32>(sizeof(type_))); \
+        return vBuf; \
+    }
+
 using Byte = unsigned char;
 using USize = std::size_t;
 using UPtr = std::uintptr_t;
@@ -59,7 +72,6 @@ using String = std::wstring;
 struct ExnIllegalState {};
 
 struct ExnIllegalArg {};
-
 
 struct ExnNoEnoughData {
     USize uRequested;
@@ -82,63 +94,3 @@ struct ExnWsa {
     constexpr ExnWsa(int n) : nError(n) {}
     int nError;
 };
-
-template<class tElem, USize kuLen>
-constexpr USize ArrayLen(tElem (&)[kuLen]) {
-    return kuLen;
-}
-
-USize GetProcessors() noexcept;
-
-U64 GetTimeStamp() noexcept;
-
-constexpr U64 StampInfinite(U64 usNow) noexcept {
-    return usNow + 0x8000000000000000ULL;
-}
-
-constexpr bool StampBefore(U64 usSub, U64 usObj) noexcept {
-    return static_cast<I64>(usSub - usObj) < 0;
-}
-
-constexpr bool StampDue(U64 usNow, U64 usDue) noexcept {
-    return static_cast<I64>(usNow - usDue) >= 0;
-}
-
-SOCKET CreateTcpSocket();
-SOCKET CreateUdpSocket();
-
-HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags);
-
-constexpr static USize STRCVT_BUFSIZE = 65536;
-
-extern thread_local char g_szUtf8Buf[STRCVT_BUFSIZE];
-extern thread_local wchar_t g_szWideBuf[STRCVT_BUFSIZE];
-
-U16 ConvertUtf8ToWide(const char *pszUtf8, int nLen = -1);
-U16 ConvertWideToUtf8(const wchar_t *pszWide, int nLen = -1);
-U16 ConvertWideToUtf8(const String &sWide);
-
-inline U16 ConvertUtf8ToWide(int nLen = -1) {
-    return ConvertUtf8ToWide(g_szUtf8Buf, nLen);
-}
-
-inline U16 ConvertWideToUtf8(int nLen = -1) {
-    return ConvertWideToUtf8(g_szWideBuf, nLen);
-}
-
-U32 CalcCrc32(const U64 *pData, USize uLen) noexcept;
-
-class Bootstrap {
-public:
-    static Bootstrap &Instance();
-
-private:
-    Bootstrap();
-    ~Bootstrap();
-
-};
-
-namespace Wsimp {
-    extern LPFN_TRANSMITPACKETS TransmitPackets;
-
-}

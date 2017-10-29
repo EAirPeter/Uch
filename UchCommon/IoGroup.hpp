@@ -3,6 +3,7 @@
 #include "Common.hpp"
 
 #include "Sync.hpp"
+#include "System.hpp"
 
 class IoGroup {
 public:
@@ -69,7 +70,7 @@ public:
     }
 
     template<class tJob, class ...tvArgs>
-    void Post(tJob &&fnJob, tvArgs &&...vArgs) {
+    void PostJob(tJob &&fnJob, tvArgs &&...vArgs) {
         using tUserJob = std::decay_t<decltype(
             std::bind(std::forward<tJob>(fnJob), std::forward<tvArgs>(vArgs)...)
         )>;
@@ -81,7 +82,7 @@ public:
             throw ExnSys();
     }
 
-    inline void Post(PTP_SIMPLE_CALLBACK pTpcbUser, void *pParam) {
+    inline void PostTpcb(PTP_SIMPLE_CALLBACK pTpcbUser, void *pParam) {
         auto dwbRes = TrySubmitThreadpoolCallback(pTpcbUser, pParam, &x_vTpCbEnv);
         if (!dwbRes)
             throw ExnSys();

@@ -31,14 +31,13 @@ namespace ImplUcp {
     // uz: size in bytes
     //  q: segment queue
 
-    constexpr static U32 kuIpPaks = 1;
-    constexpr static U32 kuMtu = 1500;
-    constexpr static U32 kuIhs = 20;
-    constexpr static U32 kuUhs = 8;
-    constexpr static U32 kuMss = kuIpPaks * (kuMtu - kuIhs) - kuUhs;
-    constexpr static U32 kuShs = 12;
-    constexpr static U32 kuMps = kuMss - kuShs;
-    constexpr static U32 kuMaxSaks = (kuMps - 1) / 3;
+    constexpr static U32 kuzMtu = 1500;
+    constexpr static U32 kuzIpHdr = 20;
+    constexpr static U32 kuzUdpHdr = 8;
+    constexpr static U32 kuzUcpHdr = 12;
+    constexpr static U32 kuzMss = kuzMtu - kuzIpHdr - kuzUdpHdr;
+    constexpr static U32 kuzPayload = kuzMss - kuzUcpHdr;
+    constexpr static U32 kuMaxSaks = (kuzPayload - 1) / 3;
 
     constexpr bool SeqBefore(U32 unSub, U32 unObj) noexcept {
         return (unSub - unObj) & 0x01000000;
@@ -57,7 +56,7 @@ namespace ImplUcp {
     constexpr U32 kubSegSak = 0x04;
     constexpr U32 kubSegAsk = 0x08;
 
-    struct UcpSeg : ByteChunk<kuMss>, IntrListNode<UcpSeg> {
+    struct UcpSeg : ByteChunk<kuzMss>, IntrListNode<UcpSeg> {
         template<class tUpper>
         friend class Ucp;
 
@@ -65,7 +64,7 @@ namespace ImplUcp {
         struct SegRecv {};
 
     public:
-        inline UcpSeg() noexcept : ByteChunk(kuShs) {}
+        inline UcpSeg() noexcept : ByteChunk(kuzUcpHdr) {}
 
         inline UcpSeg(SegRecv) noexcept : ByteChunk() {}
 
@@ -73,18 +72,18 @@ namespace ImplUcp {
             unSeq(unSeq_), unAck(unAck_), ucRwnd(ucRwnd_), uzData(uzData_), vFlags(ubFlags_)
         {
             Encode();
-            x_pWriter = &x_abyData[kuShs];
+            x_pWriter = &x_abyData[kuzUcpHdr];
         }
 
         inline void Decode() noexcept {
-            assert(GetReadable() >= kuShs);
+            assert(GetReadable() >= kuzUcpHdr);
             assert(x_pReader == x_abyData);
             unSeq = *reinterpret_cast<U32 *>(&x_abyData[0]) & 0x00ffffff;
             unAck = *reinterpret_cast<U32 *>(&x_abyData[3]) & 0x00ffffff;
             uzData = *reinterpret_cast<U16 *>(&x_abyData[6]);
             ucRwnd = *reinterpret_cast<U32 *>(&x_abyData[8]) & 0x00ffffff;
             vFlags = *reinterpret_cast<U8 *>(&x_abyData[11]);
-            x_pReader = &x_abyData[kuShs];
+            x_pReader = &x_abyData[kuzUcpHdr];
         }
 
         inline void Encode() noexcept {
@@ -102,7 +101,7 @@ namespace ImplUcp {
         }
 
         constexpr U32 GetSize() noexcept {
-            return kuShs + uzData;
+            return kuzUcpHdr + uzData;
         }
 
     private:
@@ -123,7 +122,7 @@ namespace ImplUcp {
     using SegPool = Pool<UcpSeg>;
     using SegQue = IntrList<UcpSeg, SegPool>;
 
-    struct UcpBuffer : ByteBuffer<UcpSeg, SegPool, kuMps> {
+    struct UcpBuffer : ByteBuffer<UcpSeg, SegPool, kuzPayload> {
         template<class tUpper>
         friend class Ucp;
 

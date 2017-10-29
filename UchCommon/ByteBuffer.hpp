@@ -2,12 +2,15 @@
 
 #include "Common.hpp"
 
+#include "AlignedStorage.hpp"
+#include "ByteChunk.hpp"
 #include "IntrList.hpp"
+#include "String.hpp"
 
 template<
     class tChunk,
     class tChunkPool = SysPool<tChunk>,
-    U32 kuChunkSize = tChunk::GetCapacity()
+    U32 kuChunkSize = tChunk::kCapacity
 >
 class ByteBuffer : protected IntrList<tChunk, tChunkPool> {
 public:
@@ -16,7 +19,7 @@ public:
     using UpChunk = typename ChunkPool::UniquePtr;
 
 public:
-    inline ByteBuffer(ChunkPool &vPool) noexcept : IntrList(vPool) {}
+    inline ByteBuffer(ChunkPool &vPool = ChunkPool::DefaultPool()) noexcept : IntrList(vPool) {}
 
     inline ByteBuffer(const ByteBuffer &vBuf) : IntrList(vBuf.GetElemPool()) {
         Append(vBuf);
@@ -57,7 +60,7 @@ public:
 
 public:
     constexpr ChunkPool &GetChunkPool() const noexcept {
-        return const_cast<ChunkPool &>(IntrList::GetElemPool());
+        return IntrList::GetElemPool();
     }
 
     constexpr bool IsEmpty() const noexcept {
@@ -260,48 +263,116 @@ public:
 #endif
 
 public:
-    template<class tPOD>
-    inline tPOD Peek() {
-        static_assert(std::is_pod_v<tPOD>, "POD type is required");
-        tPOD vRes;
-        PeekBytes(&vRes, sizeof(tPOD));
-        return std::move(vRes);
+    template<class tObj>
+    inline tObj Peek() {
+        tObj vObj;
+        Peek<tObj>(vObj);
+        return std::move(vObj);
     }
 
-    template<class tPOD>
-    inline tPOD Read() {
-        static_assert(std::is_pod_v<tPOD>, "POD type is required");
-        tPOD vRes;
-        ReadBytes(&vRes, sizeof(tPOD));
-        return std::move(vRes);
+    template<class tObj, REQUIRES(std::is_pod_v<tObj>)>
+    inline const ByteBuffer &Peek(tObj &vObj) const {
+        PeekBytes(&vObj, static_cast<U32>(sizeof(tObj)));
+        return *this;
     }
 
-    template<class tPOD>
-    inline void Write(const tPOD &vData) noexcept {
-        static_assert(std::is_pod_v<tPOD>, "POD type is required");
-        WriteBytes(&vData, sizeof(tPOD));
+    template<class tObj>
+    inline tObj Read() {
+        tObj vObj;
+        *this >> vObj;
+        return std::move(vObj);
     }
 
-    inline String ReadUtf8() {
+    template<class tElem, class tDele>
+    inline ByteBuffer &operator >>(std::unique_ptr<tElem, tDele> &up) noexcept {
+        return *this >> *up.get();
+    }
+
+    template<class tElem, class tDele>
+    inline ByteBuffer &operator <<(const std::unique_ptr<tElem, tDele> &up) noexcept {
+        return *this << *up.get();
+    }
+
+    template<class tChunk, REQUIRES(std::is_base_of_v<ByteChunk<tChunk::kCapacity>, tChunk>)>
+    inline ByteBuffer &operator >>(tChunk &vChunk) noexcept {
+        auto uToRead = std::min(vChunk.GetWritable(), GetSize());
+        ReadBytes(vChunk.GetWriter(), uToRead);
+        vChunk.IncWriter(uToRead);
+        return *this;
+    }
+
+    template<class tChunk, REQUIRES(std::is_base_of_v<ByteChunk<tChunk::kCapacity>, tChunk>)>
+    inline ByteBuffer &operator <<(const tChunk &vChunk) noexcept {
+        WriteBytes(vChunk.GetReader(), vChunk.GetReadable());
+        return *this;
+    }
+
+    template<class tObj, REQUIRES(std::is_scalar_v<tObj>)>
+    inline ByteBuffer &operator >>(tObj &vObj) {
+        ReadBytes(&vObj, static_cast<U32>(sizeof(tObj)));
+        return *this;
+    }
+
+    template<class tObj, REQUIRES(std::is_scalar_v<tObj>)>
+    inline ByteBuffer &operator <<(const tObj &vObj) noexcept {
+        WriteBytes(&vObj, sizeof(tObj));
+        return *this;
+    }
+
+    template<USize uSize, USize uAlign>
+    inline ByteBuffer &operator >>(AlignedStorage<uSize, uAlign> &vObj) noexcept {
+        ReadBytes(&vObj, static_cast<U32>(uSize));
+        return *this;
+    }
+
+    template<USize uSize, USize uAlign>
+    inline ByteBuffer &operator <<(const AlignedStorage<uSize, uAlign> &vObj) noexcept {
+        WriteBytes(&vObj, static_cast<U32>(uSize));
+        return *this;
+    }
+
+    inline ByteBuffer &operator >>(String &sObj) {
         auto uLen = static_cast<U32>(Peek<U16>());
         if (!uLen) {
             X_DiscardUnsafe(sizeof(U16));
-            return {};
+            sObj.clear();
+            return *this;
         }
         if (x_uSize < uLen + sizeof(U16))
             throw ExnNoEnoughData {uLen + sizeof(U16), x_uSize};
         X_DiscardUnsafe(sizeof(U16));
         X_ReadUnsafe(g_szUtf8Buf, uLen);
         uLen = ConvertUtf8ToWide(static_cast<int>(uLen));
-        return {g_szWideBuf, uLen};
+        sObj.assign(g_szWideBuf, uLen);
+        return *this;
     }
 
-    inline void WriteUtf8(const String &sData) {
-        auto uLen = ConvertWideToUtf8(sData);
+    inline ByteBuffer &operator <<(const String &sObj) {
+        auto uLen = ConvertWideToUtf8(sObj);
         auto pChunk = X_Reserve(sizeof(U16) + uLen);
         X_WriteUnsafe(pChunk, &uLen, sizeof(U16));
         if (uLen)
             X_WriteUnsafe(pChunk, g_szUtf8Buf, uLen);
+        return *this;
+    }
+
+    template<class tObj>
+    inline ByteBuffer &operator >>(std::vector<tObj> &vecObjs) {
+        vecObjs.resize(Read<U16>());
+        for (auto &vObj : vecObjs)
+            *this >> vObj;
+        return *this;
+    }
+
+    template<class tObj>
+    inline ByteBuffer &operator <<(const std::vector<tObj> &vecObjs) {
+        auto uLen = static_cast<U16>(vecObjs.size());
+        if (uLen != vecObjs.size())
+            throw ExnArgTooLarge {vecObjs.size(), 65535};
+        *this << uLen;
+        for (auto &vObj : vecObjs)
+            *this << vObj;
+        return *this;
     }
 
 public:

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
-VisualStudioVersion = 15.0.27004.2002
+VisualStudioVersion = 15.0.27004.2005
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchCommon", "UchCommon\UchCommon.vcxproj", "{46587E9B-E76C-4512-AFD2-523E7F5CC5BE}"
 EndProject
@@ -22,6 +22,8 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchClient", "UchClient\UchClient.vcxproj", "{983B17E6-A03D-41D2-AD18-D541E52DC378}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchServer", "UchServer\UchServer.vcxproj", "{714A969A-8701-47C0-B37A-4BB5F860650D}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "UchProtocol", "UchProtocol\UchProtocol.vcxproj", "{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -87,6 +89,14 @@ Global
 		{714A969A-8701-47C0-B37A-4BB5F860650D}.Release|x64.Build.0 = Release|x64
 		{714A969A-8701-47C0-B37A-4BB5F860650D}.Release|x86.ActiveCfg = Release|Win32
 		{714A969A-8701-47C0-B37A-4BB5F860650D}.Release|x86.Build.0 = Release|Win32
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Debug|x64.ActiveCfg = Debug|x64
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Debug|x64.Build.0 = Debug|x64
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Debug|x86.ActiveCfg = Debug|Win32
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Debug|x86.Build.0 = Debug|Win32
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Release|x64.ActiveCfg = Release|x64
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Release|x64.Build.0 = Release|x64
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Release|x86.ActiveCfg = Release|Win32
+		{84F7F240-101B-4F8A-87A2-C06D0C5AD00B}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

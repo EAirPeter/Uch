@@ -34,6 +34,11 @@ struct SysPool {
     using Deleter = PoolDeleter<SysPool>;
     using UniquePtr = std::unique_ptr<Obj, Deleter>;
     
+    static inline SysPool &DefaultPool() noexcept {
+        static SysPool vPool;
+        return vPool;
+    }
+
     inline Obj *Alloc() noexcept {
         return reinterpret_cast<Obj *>(::operator new(sizeof(tObj)));
     }
@@ -71,6 +76,12 @@ public:
     using Obj = tObj;
     using Deleter = PoolDeleter<Pool>;
     using UniquePtr = std::unique_ptr<Obj, Deleter>;
+
+public:
+    static inline Pool &DefaultPool() noexcept {
+        static Pool vPool;
+        return vPool;
+    }
 
 private:
     struct alignas(MEMORY_ALLOCATION_ALIGNMENT) X_Block {

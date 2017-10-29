@@ -117,7 +117,7 @@ public:
 
 public:
     constexpr ElemPool &GetElemPool() const noexcept {
-        return *const_cast<ElemPool *>(x_pPool);
+        return *x_pPool;
     }
 
     constexpr bool IsEmpty() const noexcept {

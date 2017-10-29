@@ -3,7 +3,6 @@
 #include "Common.hpp"
 
 #include "IntrList.hpp"
-#include "Pool.hpp"
 
 struct ChunkIoContext : public OVERLAPPED {
     void *pParam;
@@ -12,6 +11,9 @@ struct ChunkIoContext : public OVERLAPPED {
 
 template<U32 kuCapacity>
 class ByteChunk : public ChunkIoContext {
+public:
+    constexpr static auto kCapacity = kuCapacity;
+
 public:
     constexpr ByteChunk() noexcept = default;
     ByteChunk(const ByteChunk &) = delete;
@@ -25,11 +27,6 @@ public:
 
     ByteChunk &operator =(const ByteChunk &) = delete;
     ByteChunk &operator =(ByteChunk &&) = delete;
-
-public:
-    constexpr static U32 GetCapacity() noexcept {
-        return kuCapacity;
-    }
 
 public:
     constexpr U32 GetReaderIdx() const noexcept {

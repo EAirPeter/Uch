@@ -10,7 +10,7 @@
 
 template<
     class tUpper,
-    class tChunk = ByteChunk<4096>,
+    class tChunk = LinkedChunk<4096>,
     class tChunkPool = SysPool<tChunk>
 >
 class Pipeline {
@@ -27,8 +27,8 @@ public:
     Pipeline(const Pipeline &) = delete;
     Pipeline(Pipeline &&) = delete;
 
-    Pipeline(Upper &vUpper, SOCKET hSocket, ChunkPool &vChunkPool) :
-        x_vUpper(vUpper), x_vLower(*this, hSocket), x_vPool(vChunkPool), x_vRecvBuf(x_vPool)
+    Pipeline(Upper &vUpper, SOCKET hSocket) :
+        x_vUpper(vUpper), x_vLower(*this, hSocket), x_vRecvBuf(x_vPool)
     {}
 
     inline ~Pipeline() {
@@ -47,8 +47,13 @@ public:
         return x_vLower;
     }
 
-    constexpr ChunkPool &GetChunkPool() noexcept {
+    constexpr ChunkPool &GetChunkPool() const noexcept {
         return x_vPool;
+    }
+
+public:
+    inline Buffer MakeBuffer() const noexcept {
+        return {x_vPool};
     }
 
 public:
@@ -91,9 +96,8 @@ public:
             assert(x_uPakSize >= 2);
         }
         while (x_uPakSize && x_vRecvBuf.GetSize() >= x_uPakSize) {
-            auto uPakId = x_vRecvBuf.Read<U16>();
-            auto vPakBuf = x_vRecvBuf.Extract(x_uPakSize - sizeof(U16));
-            x_vUpper.OnPacket(uPakId, std::move(vPakBuf));
+            auto vPakBuf = x_vRecvBuf.Extract(x_uPakSize);
+            x_vUpper.OnPacket(std::move(vPakBuf));
             if (x_vRecvBuf.GetSize() >= sizeof(U16)) {
                 x_uPakSize = x_vRecvBuf.Read<U16>();
                 assert(x_uPakSize >= 2);
@@ -112,29 +116,26 @@ public:
             X_OnError(static_cast<int>(dwError));
     }
 
-    void PostPacket(U16 uPakId, Buffer &vPakBuf) {
-        auto uSize_ = vPakBuf.GetSize() + sizeof(U16);
-        auto uSize = static_cast<U16>(uSize_);
-        if (uSize != uSize_)
+    void PostPacket(Buffer &vPakBuf) {
+        auto uSize = static_cast<U16>(vPakBuf.GetSize());
+        if (uSize != vPakBuf.GetSize())
             throw ExnArgTooLarge {uSize_, 65535};
         auto upChunk = GetChunkPool().MakeUnique();
         upChunk->Write(&uSize, sizeof(U16));
-        upChunk->Write(&uPakId, sizeof(U16));
         vPakBuf.PrependChunk(std::move(upChunk));
         RAII_LOCK(x_mtx);
         try {
             while (!vPakBuf.IsEmpty())
                 x_vLower.Write(vPakBuf.PopChunk().release());
         }
-        catch (ExnSockWrite<Chunk> &e) {
+        catch (ExnSockIo<Chunk> &e) {
             x_vPool.Delete(e.pChunk);
             X_OnError(e.nError);
         }
     }
 
-    template<class tBuffer>
-    inline void PostPacket(U16 uPakId, tBuffer &&vPakBuf) {
-        PostPacket(uPakId, vPakBuf);
+    inline void PostPacket(Buffer &&vPakBuf) {
+        PostPacket(vPakBuf);
     }
 
 private:
@@ -149,7 +150,7 @@ private:
         try {
             x_vLower.PostRead(pChunk);
         }
-        catch (ExnSockRead<Chunk> &e) {
+        catch (ExnSockIo<Chunk> &e) {
             x_vPool.Delete(pChunk);
             X_OnError(e.nError);
         }
@@ -160,7 +161,7 @@ private:
     }
 
 private:
-    ChunkPool &x_vPool;
+    mutable ChunkPool x_vPool;
 
     Upper &x_vUpper;
     Lower x_vLower;
