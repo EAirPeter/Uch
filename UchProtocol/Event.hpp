@@ -2,20 +2,14 @@
 
 #include "Common.hpp"
 
+#include "Data.hpp"
 #include "FileChunk.hpp"
 #include "EventId.hpp"
 
 namespace protocol {
-#   define UEV_ID clsv::kPulse
-#   define UEV_NAME EvcPulse
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID svcl::kPulse
-#   define UEV_NAME EvsPulse
-#   include "../UchCommon/GenEvent.inl"
-
 #   define UEV_ID clsv::kExit
 #   define UEV_NAME EvcExit
+#   define UEV_MEMBERS UEV_END(String, sName)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID svcl::kExit
@@ -25,12 +19,16 @@ namespace protocol {
 
 #   define UEV_ID clsv::kLoginReq
 #   define UEV_NAME EvcLoginReq
-#   define UEV_MEMBERS UEV_VAL(String, sUser) UEV_END(ShaDigest, vPass)
+#   define UEV_MEMBERS UEV_VAL(OnlineUser, vUser) UEV_END(ShaDigest, vPass)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID svcl::kLoginRes
 #   define UEV_NAME EvsLoginRes
-#   define UEV_MEMBERS UEV_VAL(bool, bSuccess) UEV_END(String, sResult)
+#   define UEV_MEMBERS \
+        UEV_VAL(bool, bSuccess) UEV_VAL(String, sResult) \
+        UEV_VAL(std::vector<OnlineUser>, vecUsrOn) \
+        UEV_VAL(std::vector<String>, vecUsrFf) \
+        UEV_END(std::vector<ChatMessage>, vecMsgFf)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID clsv::kRegisReq
@@ -42,6 +40,11 @@ namespace protocol {
 #   define UEV_ID svcl::kRegisRes
 #   define UEV_NAME EvsRegisRes
 #   define UEV_MEMBERS UEV_VAL(bool, bSuccess) UEV_END(String, sResult)
+#   include "../UchCommon/GenEvent.inl"
+
+#   define UEV_ID svcl::kNewUser
+#   define UEV_NAME EvsNewUser
+#   define UEV_MEMBERS UEV_END(String, sUser)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID clsv::kRecoUserReq
@@ -56,7 +59,7 @@ namespace protocol {
 
 #   define UEV_ID clsv::kRecoPassReq
 #   define UEV_NAME EvcRecoPassReq
-#   define UEV_MEMBERS UEV_VAL(String, sAnswer) UEV_END(ShaDigest, vPass)
+#   define UEV_MEMBERS UEV_VAL(String, sUser) UEV_VAL(ShaDigest, vAnsw) UEV_END(ShaDigest, vPass)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID svcl::kRecoPassRes
@@ -64,42 +67,18 @@ namespace protocol {
 #   define UEV_MEMBERS UEV_VAL(bool, bSuccess) UEV_END(String, sResult)
 #   include "../UchCommon/GenEvent.inl"
 
-#   define UEV_ID clsv::kListReq
-#   define UEV_NAME EvcListReq
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID svcl::kListRes
-#   define UEV_NAME EvsListRes
-#   define UEV_MEMBERS UEV_VAL(std::vector<String>, vecOnline) UEV_END(std::vector<String>, vecOffline)
-#   include "../UchCommon/GenEvent.inl"
-
 #   define UEV_ID clsv::kMessageTo
 #   define UEV_NAME EvcMessageTo
 #   define UEV_MEMBERS UEV_VAL(String, sWhom) UEV_END(String, sMessage)
 #   include "../UchCommon/GenEvent.inl"
 
-#   define UEV_ID svcl::kMessageFrom
-#   define UEV_NAME EvsMessageFrom
-#   define UEV_MEMBERS UEV_VAL(String, sWhom) UEV_END(String, sMessage)
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID clsv::kP2pTo
-#   define UEV_NAME EvcP2pTo
-#   define UEV_MEMBERS UEV_VAL(String, sWhom) UEV_VAL(U64, uKey) UEV_END(U16, uPort)
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID svcl::kP2pFrom
-#   define UEV_NAME EvsP2pFrom
-#   define UEV_MEMBERS UEV_VAL(String, sWhom) UEV_VAL(U64, uKey) UEV_END(SockName, vSn)
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID p2pchat::kPulse
-#   define UEV_NAME EvpPulse
-#   include "../UchCommon/GenEvent.inl"
-
 #   define UEV_ID p2pchat::kExit
 #   define UEV_NAME EvpExit
-#   define UEV_MEMBERS UEV_END(String, sReason)
+#   include "../UchCommon/GenEvent.inl"
+
+#   define UEV_ID p2pchat::kAuth
+#   define UEV_NAME EvpAuth
+#   define UEV_MEMBERS UEV_END(String, sName)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID p2pchat::kMessage
@@ -109,16 +88,18 @@ namespace protocol {
 
 #   define UEV_ID p2pchat::kFileReq
 #   define UEV_NAME EvpFileReq
-#   define UEV_MEMBERS UEV_VAL(String, sName) UEV_END(U64, uSize)
+#   define UEV_MEMBERS UEV_VAL(U64, uId) UEV_VAL(String, sName) UEV_END(U64, uSize)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID p2pchat::kFileRes
 #   define UEV_NAME EvpFileRes
-#   define UEV_MEMBERS UEV_VAL(bool, bAccepted) UEV_END(U16, uPort)
+#   define UEV_MEMBERS UEV_VAL(U64, uId) UEV_VAL(bool, bAccepted) UEV_END(U16, uPort)
 #   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID ucpfile::kPulse
-#   define UEV_NAME EvuPulse
+    
+#   define UEV_ID ucpfile::kFile
+#   define UEV_NAME EvuFile
+#   define UEV_NOCOPY
+#   define UEV_MEMBERS UEV_VAL(U64, uOffset) UEV_END(FileChunkPool::UniquePtr, upChunk)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID ucpfile::kFin
@@ -127,12 +108,6 @@ namespace protocol {
 
 #   define UEV_ID ucpfile::kFinAck
 #   define UEV_NAME EvuFinAck
-#   include "../UchCommon/GenEvent.inl"
-
-#   define UEV_ID ucpfile::kFile
-#   define UEV_NAME EvuFile
-#   define UEV_NOCOPY
-#   define UEV_MEMBERS UEV_VAL(U64, uOffset) UEV_END(FileChunkPool::UniquePtr, upChunk)
 #   include "../UchCommon/GenEvent.inl"
 
 }

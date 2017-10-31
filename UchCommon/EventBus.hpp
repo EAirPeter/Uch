@@ -37,7 +37,7 @@ private:
     template<class tHandler, class tEvent, class ...tvEvents>
     inline void X_Register(tHandler &vHandler) noexcept {
         auto &vCtx = x_aCtx[tEvent::kEventId];
-        RAII_LOCK(vCtx.rwl.GetWriteLock());
+        RAII_LOCK(vCtx.rwl.WriteLock());
         vCtx.set.emplace(reinterpret_cast<void *>(static_cast<tEvent::Handler *>(&vHandler)));
         X_Register<tHandler, tvEvents...>(vHandler);
     }
@@ -48,14 +48,14 @@ private:
     template<class tHandler, class tEvent, class ...tvEvents>
     inline void X_Unregister(tHandler &vHandler) noexcept {
         auto &vCtx = x_aCtx[tEvent::kEventId];
-        if (vCtx.rwl.GetWriteLock().TryAcquire()) {
+        if (vCtx.rwl.WriteLock().TryAcquire()) {
             vCtx.set.erase(reinterpret_cast<void *>(static_cast<tEvent::Handler *>(&vHandler)));
-            vCtx.rwl.GetWriteLock().Release();
+            vCtx.rwl.WriteLock().Release();
         }
         else {
             auto &&fnJob = [this, &vCtx, &vHandler] {
                 {
-                    RAII_LOCK(vCtx.rwl.GetWriteLock());
+                    RAII_LOCK(vCtx.rwl.WriteLock());
                     vCtx.set.erase(reinterpret_cast<void *>(&vHandler));
                 }
                 RAII_LOCK(x_mtxPending);
@@ -88,7 +88,7 @@ public:
     >
     inline EventBus &PostEvent(tEvent &e) noexcept {
         auto &vCtx = x_aCtx[tEvent::kEventId];
-        RAII_LOCK(vCtx.rwl.GetReadLock());
+        RAII_LOCK(vCtx.rwl.ReadLock());
         for (auto pHandler : vCtx.set)
             reinterpret_cast<typename tEvent::Handler *>(pHandler)->OnEvent(e);
         return *this;

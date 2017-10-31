@@ -144,28 +144,31 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
+    <ClInclude Include="Event.hpp" />
+    <ClInclude Include="FrmFileRecv.hpp" />
     <ClInclude Include="FrmFileSend.hpp" />
     <ClInclude Include="FrmMain.hpp" />
     <ClInclude Include="FrmRecoPass.hpp" />
     <ClInclude Include="FrmRecoUser.hpp" />
-    <ClInclude Include="UclHandler.hpp" />
-    <ClInclude Include="Event.hpp" />
+    <ClInclude Include="UccPipl.hpp" />
     <ClInclude Include="Ucl.hpp" />
     <ClInclude Include="UclCfg.hpp" />
     <ClInclude Include="FrmEntry.hpp" />
     <ClInclude Include="FrmRegister.hpp" />
-    <ClInclude Include="UclListener.hpp" />
+    <ClInclude Include="PeerManager.hpp" />
     <ClInclude Include="UclPipl.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FrmEntry.cpp" />
+    <ClCompile Include="FrmFileRecv.cpp" />
     <ClCompile Include="FrmFileSend.cpp" />
     <ClCompile Include="FrmMain.cpp" />
     <ClCompile Include="FrmRecoPass.cpp" />
     <ClCompile Include="FrmRecoUser.cpp" />
     <ClCompile Include="FrmRegister.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="UclHandler.cpp" />
+    <ClCompile Include="PeerManager.cpp" />
+    <ClCompile Include="UccPipl.cpp" />
     <ClCompile Include="UclPipl.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

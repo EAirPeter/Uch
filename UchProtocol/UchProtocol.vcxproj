@@ -149,6 +149,7 @@
     <ClInclude Include="Event.hpp" />
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="EventId.hpp" />
+    <ClInclude Include="Data.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">

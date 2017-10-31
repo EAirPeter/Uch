@@ -126,8 +126,8 @@ private:
 
 class RWLock : public Mutex {
 public:
-    using ReadLock = RWLock;
-    using WriteLock = Mutex;
+    using RLock = RWLock;
+    using WLock = Mutex;
 
 public:
     using Mutex::Mutex;
@@ -159,11 +159,11 @@ public:
     }
 
 public:
-    constexpr ReadLock &GetReadLock() noexcept {
+    constexpr RLock &ReadLock() noexcept {
         return *this;
     }
 
-    constexpr WriteLock &GetWriteLock() noexcept {
+    constexpr WLock &WriteLock() noexcept {
         return *static_cast<Mutex *>(this);
     }
 
@@ -173,131 +173,6 @@ private:
 #endif
 
 };
-
-/*
-class RWLock {
-public:
-    class ReadLock {
-        friend RWLock;
-    private:
-        constexpr ReadLock(RWLock &rwl) noexcept : x_pSrwl(&rwl.x_vSrwl) {}
-
-        ReadLock() = delete;
-        ReadLock(const ReadLock &) = delete;
-        ReadLock(ReadLock &&) = delete;
-
-#ifndef NDEBUG
-        inline ~ReadLock() {
-            assert(!d_atmnCount.load());
-        }
-#endif
-
-        ReadLock &operator =(const ReadLock &) = delete;
-        ReadLock &operator =(ReadLock &&) = delete;
-
-    public:
-        constexpr SRWLOCK *GetNative() noexcept {
-            return x_pSrwl;
-        }
-
-        inline void Acquire() noexcept {
-            AcquireSRWLockShared(x_pSrwl);
-            assert(d_atmnCount.fetch_add(1) >= 0);
-        }
-
-        inline bool TryAcquire() noexcept {
-            auto bRes = TryAcquireSRWLockShared(x_pSrwl);
-            assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
-            return bRes;
-        }
-
-        inline void Release() noexcept {
-            assert(d_atmnCount.fetch_sub(1) > 0);
-            ReleaseSRWLockShared(x_pSrwl);
-        }
-
-    private:
-        SRWLOCK *x_pSrwl;
-#ifndef NDEBUG
-        std::atomic<I64> d_atmnCount = 0;
-#endif
-
-    };
-
-    class WriteLock {
-        friend RWLock;
-    private:
-        constexpr WriteLock(RWLock &rwl) noexcept : x_pSrwl(&rwl.x_vSrwl) {}
-
-        WriteLock() = delete;
-        WriteLock(const WriteLock &) = delete;
-        WriteLock(WriteLock &&) = delete;
-
-#ifndef NDEBUG
-        inline ~WriteLock() {
-            assert(!d_atmnCount.load());
-        }
-#endif
-
-        WriteLock &operator =(const WriteLock &) = delete;
-        WriteLock &operator =(WriteLock &&) = delete;
-
-    public:
-        constexpr SRWLOCK *GetNative() noexcept {
-            return x_pSrwl;
-        }
-
-        inline void Acquire() noexcept {
-            AcquireSRWLockExclusive(x_pSrwl);
-            assert(d_atmnCount.fetch_add(1) >= 0);
-        }
-
-        inline bool TryAcquire() noexcept {
-            auto bRes = TryAcquireSRWLockExclusive(x_pSrwl);
-            assert(bRes ? d_atmnCount.fetch_add(1) >= 0 : true);
-            return bRes;
-        }
-
-        inline void Release() noexcept {
-            assert(d_atmnCount.fetch_sub(1) > 0);
-            ReleaseSRWLockExclusive(x_pSrwl);
-        }
-
-    private:
-        SRWLOCK *x_pSrwl;
-#ifndef NDEBUG
-        std::atomic<I64> d_atmnCount = 0;
-#endif
-
-    };
-
-public:
-    constexpr RWLock() noexcept = default;
-    RWLock(const RWLock&) = delete;
-    RWLock(RWLock &&) = delete;
-
-    RWLock &operator =(const RWLock &) = delete;
-    RWLock &operator =(RWLock &&) = delete;
-
-public:
-    constexpr SRWLOCK *GetNative() noexcept {
-        return &x_vSrwl;
-    }
-
-    constexpr ReadLock &GetReadLock() noexcept {
-        return x_vRLock;
-    }
-
-    constexpr WriteLock &GetWriteLock() noexcept {
-        return x_vWLock;
-    }
-
-private:
-    ReadLock x_vRLock {*this};
-    WriteLock x_vWLock {*this};
-    SRWLOCK x_vSrwl = SRWLOCK_INIT;
-
-};*/
 
 class ConditionVariable {
 public:

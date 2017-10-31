@@ -116,10 +116,10 @@ public:
             X_OnError(static_cast<int>(dwError));
     }
 
-    void PostPacket(Buffer &vPakBuf) {
+    void PostBuffer(Buffer &vPakBuf) {
         auto uSize = static_cast<U16>(vPakBuf.GetSize());
         if (uSize != vPakBuf.GetSize())
-            throw ExnArgTooLarge {uSize_, 65535};
+            throw ExnArgTooLarge {vPakBuf.GetSize(), 65535};
         auto upChunk = GetChunkPool().MakeUnique();
         upChunk->Write(&uSize, sizeof(U16));
         vPakBuf.PrependChunk(std::move(upChunk));
@@ -134,8 +134,13 @@ public:
         }
     }
 
-    inline void PostPacket(Buffer &&vPakBuf) {
-        PostPacket(vPakBuf);
+    inline void PostBuffer(Buffer &&vPakBuf) {
+        PostBuffer(vPakBuf);
+    }
+
+    template<class tPacket>
+    inline void PostPacket(tPacket &&vPacket) {
+        PostBuffer(MakeBuffer() << vPacket);
     }
 
 private:

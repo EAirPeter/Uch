@@ -6,13 +6,21 @@
 #include <nana/gui/widgets/button.hpp>
 #include <nana/gui/widgets/textbox.hpp>
 
-class FrmRegister : public nana::form {
+class FrmRegister :
+    public nana::form,
+    public HandlerBase<
+        protocol::EvsRegisRes
+    >
+{
 public:
     FrmRegister(const nana::form &frmParent);
 
+public:
+    void OnEvent(protocol::EvsRegisRes &e) noexcept override;
+
 private:
     void X_OnRegister();
-    void X_OnCancel();
+    void X_OnDestroy(const nana::arg_unload &e);
 
 private:
     nana::place x_pl {*this};

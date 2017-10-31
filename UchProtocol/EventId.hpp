@@ -7,38 +7,32 @@ namespace protocol {
 
     namespace clsv {
         enum Id : Byte {
-            kPulse = kBegin,
-            kExit,
+            kExit = kBegin,
             kLoginReq,
             kRegisReq,
             kRecoUserReq,
             kRecoPassReq,
-            kListReq,
             kMessageTo,
-            kP2pTo,
             x_kEnd,
         };
     }
 
     namespace svcl {
         enum Id : Byte {
-            kPulse = clsv::x_kEnd,
-            kExit,
+            kExit = clsv::x_kEnd,
             kLoginRes,
             kRegisRes,
+            kNewUser,
             kRecoUserRes,
             kRecoPassRes,
-            kListRes,
-            kMessageFrom,
-            kP2pFrom,
             x_kEnd,
         };
     }
 
     namespace p2pchat {
         enum Id : Byte {
-            kPulse = svcl::x_kEnd,
-            kExit,
+            kExit = clsv::x_kEnd,
+            kAuth,
             kMessage,
             kFileReq,
             kFileRes,
@@ -48,8 +42,7 @@ namespace protocol {
 
     namespace ucpfile {
         enum Id : Byte {
-            kPulse = p2pchat::x_kEnd,
-            kFile,
+            kFile = p2pchat::x_kEnd,
             kFin,
             kFinAck,
             x_kEnd,

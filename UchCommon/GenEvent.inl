@@ -1,4 +1,4 @@
-#if !(defined(UEV_ID) && defined(UEV_NAME))
+#if !defined(UEV_NAME) || !(defined(UEV_NOTEV) || defined(UEV_ID))
 #   error packet generation
 #endif
 
@@ -9,50 +9,46 @@
 #   undef UEV_END
 #endif
 
-struct UEV_NAME : EventBase<UEV_ID, UEV_NAME> {
+struct UEV_NAME
+#ifndef UEV_NOTEV
+    : EventBase<UEV_ID, UEV_NAME>
+#endif
+{
     inline UEV_NAME() = default;
 #ifndef UEV_NOCOPY
     inline UEV_NAME(const UEV_NAME &) = default;
 #endif
     inline UEV_NAME(UEV_NAME &&) = default;
 
-#ifndef UEV_NOCOPY
-    inline UEV_NAME &operator =(const UEV_NAME &) = default;
-#endif
-    inline UEV_NAME &operator =(UEV_NAME &&) = default;
-
-#ifndef UEV_NOCOPY
-#   ifdef UEV_MEMBERS
-#       define UEV_VAL(type_, name_) UEV_END(type_, name_),
-#       define UEV_END(type_, name_) const type_ &CONCAT(arg, name_)
-    UEV_NAME(UEV_MEMBERS) :
-#       undef UEV_END
-#       define UEV_END(type_, name_) name_ {CONCAT(arg, name_)}
-        UEV_MEMBERS
-#       undef UEV_VAL
-#       undef UEV_END
-    {}
-#   endif
-#endif
-
 #ifdef UEV_MEMBERS
 #   define UEV_VAL(type_, name_) UEV_END(type_, name_),
-#   define UEV_END(type_, name_) type_ &&CONCAT(arg, name_)
-        UEV_NAME(UEV_MEMBERS) :
+#   define UEV_END(type_, name_) class CONCAT(tArg, name_)
+    template<UEV_MEMBERS>
 #   undef UEV_END
-#   define UEV_END(type_, name_) name_ {std::move(CONCAT(arg, name_))}
+#   define UEV_END(type_, name_) CONCAT(tArg, name_) &&CONCAT(vArg, name_)
+    inline UEV_NAME(UEV_MEMBERS) :
+#   undef UEV_END
+#   define UEV_END(type_, name_) name_(std::forward<CONCAT(tArg, name_)>(CONCAT(vArg, name_)))
         UEV_MEMBERS
 #   undef UEV_VAL
 #   undef UEV_END
     {}
 #endif
+    
+#ifndef UEV_NOCOPY
+    inline UEV_NAME &operator =(const UEV_NAME &) = default;
+#endif
+    inline UEV_NAME &operator =(UEV_NAME &&) = default;
 
     template<class tBuffer>
     inline void EmitBuffer(tBuffer &vBuf) const {
+#ifndef UEV_NOTEV
+        vBuf << static_cast<Byte>(kEventId);
+#endif
 #ifdef UEV_MEMBERS
 #   define UEV_VAL(type_, name_) UEV_END(type_, name_)
 #   define UEV_END(type_, name_) << name_
-        vBuf << static_cast<Byte>(kEventId) UEV_MEMBERS;
+        vBuf UEV_MEMBERS;
 #   undef UEV_VAL
 #   undef UEV_END
 #else
@@ -100,6 +96,9 @@ struct UEV_NAME : EventBase<UEV_ID, UEV_NAME> {
 #endif
 #ifdef UEV_NAME
 #   undef UEV_NAME
+#endif
+#ifdef UEV_NOTEV
+#   undef UEV_NOTEV
 #endif
 #ifdef UEV_NOCOPY
 #   undef UEV_NOCOPY

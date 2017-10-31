@@ -7,21 +7,22 @@
 #include "../UchCommon/Pipeline.hpp"
 #include "../UchCommon/Pool.hpp"
 
-class UclPipl : public Pipeline<UclPipl, LinkedChunk<256>> {
+class UccPipl : public Pipeline<UccPipl, LinkedChunk<256>> {
 public:
-    UclPipl();
+    UccPipl(SOCKET hSocket);
+    UccPipl(SOCKET hSocket, const String &sUser);
+
+    constexpr const String &GetUser() const noexcept {
+        return x_sUser;
+    }
 
 public:
     void OnPacket(Buffer vPakBuf) noexcept;
     void OnPassivelyClose() noexcept;
     void OnForciblyClose() noexcept;
     void OnFinalize() noexcept;
-    void Wait() noexcept;
 
 private:
-    Mutex x_mtx;
-    ConditionVariable x_cv;
-    bool x_bDone = false;
-
+    String x_sUser;
 
 };
