@@ -78,19 +78,33 @@ FrmRegister::FrmRegister(const form &frmParent) :
 
 
 void FrmRegister::OnEvent(protocol::EvsRegisRes &e) noexcept {
-    if (!e.bSuccess) {
-        msgbox mbx {*this, u8"Uch - Register", nana::msgbox::ok};
-        mbx.icon(msgbox::icon_error);
-        mbx << L"Failed to register: " << e.sResult;
-        mbx();
-        enabled(true);
-        return;
-    }
-    close();
+    Ucl::Iog().PostJob([this, e] {
+        if (!e.bSuccess) {
+            msgbox mbx {*this, u8"Uch - Register", nana::msgbox::ok};
+            mbx.icon(msgbox::icon_error);
+            mbx << L"Failed to register: " << e.sResult;
+            mbx();
+            enabled(true);
+            return;
+        }
+        close();
+    });
 }
 
 void FrmRegister::X_OnRegister() {
     enabled(false);
+    auto sUser = x_txtUsername.caption_wstring();
+    auto sPass = x_txtPassword.caption_wstring();
+    auto sQues = x_txtQuestion.caption_wstring();
+    auto sAnsw = x_txtAnswer.caption_wstring();
+    if (sUser.empty() || sPass.empty() || sQues.empty() || sAnsw.empty()) {
+        msgbox mbx {*this, u8"Uch - Register", nana::msgbox::ok};
+        mbx.icon(msgbox::icon_error);
+        mbx << L"Failed to register: Please fill all fields";
+        mbx();
+        enabled(true);
+        return;
+    }
     ShaDigest vPass, vAnsw;
     CryptoPP::SHA256 vSha;
     auto uPass = ConvertWideToUtf8(x_txtPassword.caption_wstring());

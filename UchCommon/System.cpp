@@ -1,5 +1,6 @@
 #include "Common.hpp"
 
+#include "String.hpp"
 #include "System.hpp"
 #include "Wsa.hpp"
 
@@ -43,7 +44,7 @@ USize GetProcessors() noexcept {
 
 HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags) {
     auto hFile = CreateFileW(
-        sPath.c_str(), dwAccess, 0, nullptr, dwCreation, dwFlags | FILE_FLAG_OVERLAPPED, nullptr
+        sPath.c_str(), dwAccess, 0, nullptr, dwCreation, dwFlags, nullptr
     );
     if (hFile == INVALID_HANDLE_VALUE)
         throw ExnSys();
@@ -54,4 +55,14 @@ U64 GetTimeStamp() noexcept {
     LARGE_INTEGER vStamp;
     QueryPerformanceCounter(&vStamp);
     return static_cast<U64>(vStamp.QuadPart) * 1000000ULL / static_cast<U64>(f_vQpcFreq.QuadPart);
+}
+
+String FormattedTime() noexcept {
+    auto nRes = GetTimeFormatEx(
+        LOCALE_NAME_USER_DEFAULT,
+        0, nullptr, L"hh:mm:ss tt",
+        g_szWideBuf, static_cast<int>(STRCVT_BUFSIZE)
+    );
+    assert(nRes);
+    return {g_szWideBuf, static_cast<USize>(nRes)};
 }

@@ -134,6 +134,26 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ClientManager.hpp" />
+    <ClInclude Include="Common.hpp" />
+    <ClInclude Include="Event.hpp" />
+    <ClInclude Include="FrmMain.hpp" />
+    <ClInclude Include="Store.hpp" />
+    <ClInclude Include="Usv.hpp" />
+    <ClInclude Include="UsvCfg.hpp" />
+    <ClInclude Include="UsvPipl.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ClientManager.cpp" />
+    <ClCompile Include="FrmMain.cpp" />
+    <ClCompile Include="Main.cpp" />
+    <ClCompile Include="Store.cpp" />
+    <ClCompile Include="UsvPipl.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\UchCommon\UchCommon.vcxproj">
+      <Project>{46587e9b-e76c-4512-afd2-523e7f5cc5be}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -46,18 +46,20 @@ FrmRecoUser::FrmRecoUser(const nana::form &frmParent) :
 }
 
 void FrmRecoUser::OnEvent(protocol::EvsRecoUserRes &e) noexcept {
-    if (!e.bSuccess) {
-        msgbox mbx {*this, u8"Uch - Recover password", nana::msgbox::ok};
-        mbx.icon(msgbox::icon_error);
-        mbx << L"Failed to recover your password: " << e.sResult;
-        mbx();
-        enabled(true);
-        return;
-    }
-    FrmRecoPass frmRecoPass {*this, x_txtUsername.caption_wstring(), e.sResult};
-    hide();
-    frmRecoPass.modality();
-    close();
+    Ucl::Iog().PostJob([this, e] {
+        if (!e.bSuccess) {
+            msgbox mbx {*this, u8"Uch - Recover password", nana::msgbox::ok};
+            mbx.icon(msgbox::icon_error);
+            mbx << L"Failed to recover your password: " << e.sResult;
+            mbx();
+            enabled(true);
+            return;
+        }
+        FrmRecoPass frmRecoPass {*this, x_txtUsername.caption_wstring(), e.sResult};
+        hide();
+        frmRecoPass.modality();
+        close();
+    });
 }
 
 void FrmRecoUser::X_OnNext() {

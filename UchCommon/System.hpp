@@ -29,3 +29,5 @@ constexpr bool StampBefore(U64 usSub, U64 usObj) noexcept {
 constexpr bool StampDue(U64 usNow, U64 usDue) noexcept {
     return static_cast<I64>(usNow - usDue) >= 0;
 }
+
+String FormattedTime() noexcept;

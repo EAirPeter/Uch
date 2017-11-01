@@ -72,26 +72,31 @@ FrmEntry::FrmEntry() :
 }
 
 void FrmEntry::OnEvent(protocol::EvsLoginRes &e) noexcept {
-    if (!e.bSuccess) {
-        msgbox mbx {*this, u8"Uch - Login", nana::msgbox::ok};
-        mbx.icon(msgbox::icon_error);
-        mbx << L"Failed to login: " << e.sResult;
-        mbx();
-        enabled(true);
-        return;
-    }
-    FrmMain frmMain {*this};
-    for (auto &vMsg : e.vecMsgFf)
-        Ucl::Bus().PostEvent(event::EvMessage {std::move(vMsg)});
-    Ucl::Pmg()->SetFfline(e.vecUsrFf);
-    Ucl::Pmg()->SetOnline(e.vecUsrOn);
-    hide();
-    frmMain.modality();
-    close();
+    Ucl::Iog().PostJob([this, e] {
+        if (!e.bSuccess) {
+            msgbox mbx {*this, u8"Uch - Login", nana::msgbox::ok};
+            mbx.icon(msgbox::icon_error);
+            mbx << L"Failed to login: " << e.sResult;
+            mbx();
+            return;
+        }
+        Ucl::Usr() = x_txtUsername.caption_wstring();
+        FrmMain frmMain {*this};
+        for (auto &vMsg : e.vecMsgFf) {
+            Ucl::Bus().PostEvent(event::EvMessage {protocol::ChatMessage {
+                String {L"(Offline) "} +std::move(vMsg.sFrom),
+                std::move(vMsg.sMessage)
+            }});
+        }
+        Ucl::Pmg()->SetFfline(e.vecUsrFf);
+        Ucl::Pmg()->SetOnline(e.vecUsrOn);
+        hide();
+        frmMain.modality();
+        close();
+    });
 }
 
 void FrmEntry::X_OnLogin() {
-    enabled(false);
     auto uPass = ConvertWideToUtf8(x_txtPassword.caption_wstring());
     ShaDigest vDigest;
     CryptoPP::SHA256 {}.CalculateDigest(

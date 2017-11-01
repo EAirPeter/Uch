@@ -29,8 +29,9 @@ public:
 private:
     void X_OnSend();
     void X_OnFile();
-    void X_OnExit();
     void X_OnDestroy(const nana::arg_unload &e);
+
+    void X_AddMessage(const String &sWho, const String &sWhat);
 
 private:
     nana::place x_pl {*this};

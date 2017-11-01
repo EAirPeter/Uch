@@ -6,10 +6,9 @@
 #include "../UchCommon/ByteChunk.hpp"
 #include "../UchCommon/Pipeline.hpp"
 
-class UccPipl : public Pipeline<UccPipl, LinkedChunk<256>> {
+class UsvPipl : public Pipeline<UsvPipl, LinkedChunk<256>> {
 public:
-    UccPipl(SOCKET hSocket);
-    UccPipl(SOCKET hSocket, const String &sUser);
+    UsvPipl(SOCKET hSocket);
 
     constexpr const String &GetUser() const noexcept {
         return x_sUser;

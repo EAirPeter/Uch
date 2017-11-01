@@ -21,6 +21,7 @@ void UclPipl::OnPacket(Buffer vPakBuf) noexcept {
         ONPAK(svcl::kRegisRes, EvsRegisRes);
         ONPAK(svcl::kRecoUserRes, EvsRecoUserRes);
         ONPAK(svcl::kRecoPassRes, EvsRecoPassRes);
+        ONPAK(svcl::kNewUser, EvsNewUser);
     default:
         assert(false); // wtf???
     }

@@ -15,8 +15,4 @@ namespace protocol {
 #   define UEV_MEMBERS UEV_VAL(String, sFrom) UEV_END(String, sMessage)
 #   include "../UchCommon/GenEvent.inl"
 
-    inline nana::listbox::oresolver &operator <<(nana::listbox::oresolver &vOr, const ChatMessage &vMsg) {
-        return vOr << vMsg.sFrom << vMsg.sMessage;
-    }
-
 }

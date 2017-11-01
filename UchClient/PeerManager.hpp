@@ -39,13 +39,17 @@ public:
     UccPipl &operator [](const String &sUser);
 
 private:
+    void X_UpdateOnline();
+    void X_UpdateFfline();
+
+private:
     std::unordered_set<String> x_setUff;
     std::unordered_map<String, UccPipl *> x_mapUon;
     std::unordered_map<SOCKET, std::unique_ptr<UccPipl>> x_mapPipls;
 
     Listener<PeerManager, UccPipl> x_vLis;
 
-    RWLock x_rwl;
+    RecursiveMutex x_mtx;
     ConditionVariable x_cv;
     bool x_bDone = false;
     bool x_bStopping = false;

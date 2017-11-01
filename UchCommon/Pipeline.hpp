@@ -86,21 +86,21 @@ public:
             return;
         }
         x_vRecvBuf.PushChunk(x_vPool.Wrap(pChunk));
-        if (!uDone) {
+        if (!uDone) {   
             x_vUpper.OnPassivelyClose();
             x_vLower.Close();
             return;
         }
         if (!x_uPakSize && x_vRecvBuf.GetSize() >= sizeof(U16)) {
             x_uPakSize = x_vRecvBuf.Read<U16>();
-            assert(x_uPakSize >= 2);
+            assert(x_uPakSize);
         }
         while (x_uPakSize && x_vRecvBuf.GetSize() >= x_uPakSize) {
             auto vPakBuf = x_vRecvBuf.Extract(x_uPakSize);
             x_vUpper.OnPacket(std::move(vPakBuf));
             if (x_vRecvBuf.GetSize() >= sizeof(U16)) {
                 x_uPakSize = x_vRecvBuf.Read<U16>();
-                assert(x_uPakSize >= 2);
+                assert(x_uPakSize);
             }
             else
                 x_uPakSize = 0;

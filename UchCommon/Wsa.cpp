@@ -83,3 +83,7 @@ SOCKET CreateBoundSocket(const SockName &vSockName, bool bTcp) {
     }
     return hSocket;
 }
+
+SockName::operator String() const {
+    return SockNameToString(*this);
+}

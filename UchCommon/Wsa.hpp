@@ -5,6 +5,9 @@
 struct SockName {
     sockaddr vSockAddr {};
     socklen_t nSockLen {sizeof(sockaddr)};
+
+    operator String() const;
+
 };
 
 BUFOPR(SockName)

@@ -2,27 +2,27 @@
 
 #include "../UchCommon/System.hpp"
 
-#include "FrmEntry.hpp"
-#include "Ucl.hpp"
+#include "FrmMain.hpp"
+#include "Usv.hpp"
 
 #include <nana/gui.hpp>
 
-Ucl Ucl::x_vInstance {};
+Usv Usv::x_vInstance {};
 
 int wmain() {
     try {
         System::GlobalStartup();
-        Ucl::Cfg().Load();
-        Ucl::Cfg().Save();
-        Ucl::Iog().Start();
-        Ucl::Pmg() = std::make_unique<PeerManager>();
-        Ucl::Con() = std::make_unique<UclPipl>();
-        FrmEntry frmEntry;
-        frmEntry.show();
+        Usv::Cfg().Load();
+        Usv::Cfg().Save();
+        Usv::Sto().Load();
+        Usv::Iog().Start();
+        Usv::Cmg() = std::make_unique<ClientManager>();
+        FrmMain frmMain;
+        frmMain.show();
         nana::exec();
-        Ucl::Con()->Wait();
-        Ucl::Pmg()->Wait();
-        Ucl::Iog().Shutdown();
+        Usv::Cmg()->Wait();
+        Usv::Iog().Shutdown();
+        Usv::Sto().Save();
     }
     catch (ExnSys &e) {
         nana::msgbox mbx {u8"Uch - Fatal error"};
