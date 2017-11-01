@@ -132,4 +132,8 @@ namespace ImplUcp {
 
 }
 
+constexpr static U32 kuzUcpHeader = ImplUcp::kuzUcpHdr;
+constexpr static U32 kuzUcpPayload = ImplUcp::kuzPayload;
+constexpr static U32 kuzUcpSegment = ImplUcp::kuzMss;
+
 using ImplUcp::UcpBuffer;

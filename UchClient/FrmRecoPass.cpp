@@ -11,7 +11,7 @@ FrmRecoPass::FrmRecoPass(const nana::form &frmParent, const String &sUser, const
     form(frmParent, {360, 200}, appear::decorate<appear::taskbar, appear::minimize>()),
     x_sUser(sUser)
 {
-    caption(L"Uch-Password Recovery");
+    caption(L"Uch - Recover your password");
     events().unload(std::bind(&FrmRecoPass::X_OnDestroy, this, std::placeholders::_1));
     x_btnNext.caption(L"Next");
     x_btnNext.events().click(std::bind(&FrmRecoPass::X_OnNext, this));

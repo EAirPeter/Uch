@@ -66,13 +66,16 @@ namespace ImplUcp {
         }
 
     public:
-        constexpr U32 GetQueueSize() noexcept {
-            RAII_LOCK(x_mtx);
-            return x_qQue.GetSize();
+        inline U32 GetQueueSize() noexcept {
+            return x_atmuzQue.load();
         }
 
-        constexpr U32 GetRwndSize() noexcept {
-            return x_atmuzAsm.load();
+        inline U64 GetReceivedSize() noexcept {
+            return x_atmuzRcvd.load();
+        }
+
+        inline U64 GetSentSize() noexcept {
+            return x_atmuzSent.load();
         }
 
         inline void EndOnPacket(U32 uzSize) noexcept {
@@ -187,18 +190,6 @@ namespace ImplUcp {
                     return false;
                 }
                 x_usNow = usNow;
-                if (StampDue(x_usNow, x_usSecond)) {
-                    ImplDbg::Println(
-                        "ssthresh = ", x_uzSsthresh, ", cwnd = ", x_uzCwnd,
-                        ", rwnd = ", x_atmuzAsm.load(), ", xrwnd = ", x_ucRmtRwnd,
-                        ", recv = ", x_uzRecv, ", send = ", x_uzSend
-                    );
-                    x_atmuzRecv = x_uzRecv;
-                    x_atmuzSend = x_uzSend;
-                    x_uzRecv = 0;
-                    x_uzSend = 0;
-                    x_usSecond = x_usNow + 1'000'000;
-                }
                 constexpr auto ubFlags = x_kubNeedAck | x_kubNeedAsk | x_kubDirty;
                 if (x_vState(ubFlags) || StampDue(x_usNow, x_usTimeout)) {
                     try {
@@ -215,6 +206,9 @@ namespace ImplUcp {
                         return false;
                     }
                 }
+                x_atmuzQue.store(x_qQue.GetSize());
+                x_atmuzRcvd.store(x_uzRcvd);
+                x_atmuzSent.store(x_uzSent);
             }
 #ifdef UCP_TRANSMIT
             if (bTsmAcq) {
@@ -228,7 +222,7 @@ namespace ImplUcp {
         }
 
     public:
-        inline void PostPacket(UcpBuffer &qPak) {
+        inline void PostBuffer(UcpBuffer &qPak) {
             for (auto pSeg = qPak.GetHead(); pSeg != qPak.GetNil(); pSeg = pSeg->GetNext()) {
                 pSeg->uzData = pSeg->GetReadable();
                 pSeg->vFlags = kubSegPsh | kubSegFrg;
@@ -241,8 +235,12 @@ namespace ImplUcp {
             x_vState += x_kubDirty;
         }
 
-        inline void PostPacket(UcpBuffer &&vBuf) {
+        inline void PostBuffer(UcpBuffer &&vBuf) {
             PostPacket(vBuf);
+        }
+        template<class tPacket>
+        inline void PostPacket(tPacket &&vPacket) {
+            PostBuffer(MakeBuffer() << vPacket);
         }
 
     private:
@@ -265,7 +263,6 @@ namespace ImplUcp {
                 assert(pSnd->ucSent);
                 X_UpdateRtt(pSnd);
                 uzAcked += pSnd->GetSize();
-                x_uzSend += pSnd->GetSize();
                 x_qSnd.Remove(pSnd);
                 pSnd = x_qSnd.GetHead();
             }
@@ -282,7 +279,6 @@ namespace ImplUcp {
                             usSakLatest = pSnd->usSent;
                         X_UpdateRtt(pSnd);
                         uzAcked += pSnd->GetSize();
-                        x_uzSend += pSnd->GetSize();
                         x_qSnd.Remove(pSnd);
                         pSnd = x_qSnd.GetHead();
                     }
@@ -293,6 +289,7 @@ namespace ImplUcp {
                         ++pSnd->ucSkipped;
             }
             x_uzFlight -= uzAcked;
+            x_uzSent += uzAcked;
             if (uzAcked) {
                 x_vState += x_kubDirty;
                 x_unSndAck = x_qSnd.IsEmpty() ? x_unSndSeq : x_qSnd.GetHead()->unSeq;
@@ -312,7 +309,7 @@ namespace ImplUcp {
                     auto &upQue = x_aqRcv[upRcv->unSeq % x_kucBuf];
                     if (upQue)
                         break;
-                    x_uzRecv += upRcv->GetSize();
+                    x_uzRcvd += upRcv->GetSize();
                     upQue = std::move(upRcv);
                     U32 uzRwndAlloc = 0;
                     auto unBound = SeqIncrease(x_unRcvSeq, x_kucBuf);
@@ -639,7 +636,6 @@ namespace ImplUcp {
         Flags<U32> x_vState = 0;
         U64 x_usNow = 0;         // last tick time
         U64 x_usTimeout = 0;     // next time for resend
-        U64 x_usSecond = 0;      // the end of this second
         U64 x_usAskTimeout = 0;
         U64 x_utAskRto = 0;
         U32 x_ucAskTimedOut = 0;
@@ -662,12 +658,13 @@ namespace ImplUcp {
         UpSeg x_aqRcv[x_kucBuf] {}; // segments received, may not be correctly ordered
         SegQue x_qAsm {x_vPool};    // segments received and ordered, waiting to be reassemble to packets
 
-        U32 x_uzRecv = 0;                   // bytes received in this second
-        U32 x_uzSend = 0;                   // bytes sent in this second
-        std::atomic<U32> x_atmuzRecv = 0;   // bytes received in the last second
-        std::atomic<U32> x_atmuzSend = 0;   // bytes sent in the last second
+        U64 x_uzRcvd = 0; // bytes received
+        U64 x_uzSent = 0; // bytes sent
 
         std::atomic<U32> x_atmuzAsm = x_kuzAsmMax;   // available payload size in x_qAsm and qAsm-s
+        std::atomic<U32> x_atmuzQue = 0;
+        std::atomic<U64> x_atmuzRcvd = 0;
+        std::atomic<U64> x_atmuzSent = 0;
 
         std::vector<U32> x_vecSndSaks; // saks to be sent
 

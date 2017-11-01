@@ -23,6 +23,15 @@ void UccPipl::OnPacket(Buffer vPakBuf) noexcept {
     case p2pchat::kMessage:
         Ucl::Bus().PostEvent(event::EvMessage {ChatMessage {x_sUser, vPakBuf.Read<EvpMessage>().sMessage}});
         break;
+    case p2pchat::kFileReq:
+        vPakBuf.Read<EvpFileReq>();
+        break;
+    case p2pchat::kFileRes:
+        Ucl::Bus().PostEvent(vPakBuf.Read<EvpFileRes>());
+        break;
+    case p2pchat::kFileCancel:
+        Ucl::Bus().PostEvent(vPakBuf.Read<EvpFileCancel>());
+        break;
     default:
         assert(false); // wtf???
     }

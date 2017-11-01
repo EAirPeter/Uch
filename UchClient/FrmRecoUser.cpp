@@ -9,7 +9,7 @@ using namespace nana;
 FrmRecoUser::FrmRecoUser(const nana::form &frmParent) :
     form(frmParent, {360, 200}, appear::decorate<appear::taskbar, appear::minimize>())
 {
-    caption(L"Uch - Recover password");
+    caption(L"Uch - Recover your password");
     events().unload(std::bind(&FrmRecoUser::X_OnDestroy, this, std::placeholders::_1));
     x_btnNext.caption(L"Next");
     x_btnNext.events().click(std::bind(&FrmRecoUser::X_OnNext, this));

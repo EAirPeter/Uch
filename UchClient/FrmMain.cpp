@@ -21,7 +21,7 @@ FrmMain::FrmMain(const nana::form &frmParent) :
         if (e.key == keyboard::enter)
             X_OnSend();
     });
-    x_btnFile.caption(L"File");
+    x_btnFile.caption(L"Send File");
     x_btnFile.events().click(std::bind(&FrmMain::X_OnFile, this));
     x_btnFile.events().key_press([this] (const arg_keyboard &e) {
         if (e.key == keyboard::enter)
@@ -100,7 +100,6 @@ void FrmMain::X_OnSend() {
         mbx.icon(msgbox::icon_error);
         mbx << L"Please select a recipient";
         mbx();
-        enabled(true);
         return;
     }
     auto &idx = vec.front();
@@ -127,13 +126,28 @@ void FrmMain::X_OnSend() {
 }
 
 void FrmMain::X_OnFile() {
-    wprintf(L"!file\n");
+    auto vec = x_lbxUsers.selected();
+    if (vec.empty()) {
+        msgbox mbx {*this, u8"Uch - Send file", msgbox::ok};
+        mbx.icon(msgbox::icon_error);
+        mbx << L"Please select a recipient";
+        mbx();
+        return;
+    }
+    auto &idx = vec.front();
+    if (idx.cat != 1) {
+        msgbox mbx {*this, u8"Uch - Send file", msgbox::ok};
+        mbx.icon(msgbox::icon_error);
+        mbx << L"Please select an online user";
+        mbx();
+        return;
+    }
+    auto sUser = AsWideString(x_lbxUsers.at(idx.cat).at(idx.item).text(0));
     filebox fb {*this, true};
     if (!fb())
         return;
     auto sPath = AsWideString(fb.file());
-    wprintf((sPath + L"\n").c_str());
-    form_loader<FrmFileSend> {}(*this, L"mmmmmp", sPath).show();
+    form_loader<FrmFileSend> {}(*this, sUser, sPath).show();
 }
 
 void FrmMain::X_OnDestroy(const nana::arg_unload &e) {
