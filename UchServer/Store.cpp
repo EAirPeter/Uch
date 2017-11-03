@@ -42,16 +42,9 @@ void Store::Save() {
 }
 
 void Store::X_ReadAll(Buffer &vBuf) {
-    HANDLE hFile_;
-    try {
-        hFile_ = CreateFileHandle(kszFile, GENERIC_READ, OPEN_EXISTING, 0);
-    }
-    catch (ExnSys) {
-        return;
-    }
-    std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hFile(hFile_, &CloseHandle);
+    auto uhFile = CreateFileHandle(kszFile, GENERIC_READ, OPEN_EXISTING, 0);
     LARGE_INTEGER vLi;
-    if (!GetFileSizeEx(hFile_, &vLi))
+    if (!GetFileSizeEx(uhFile.get(), &vLi))
         throw ExnSys();
     auto uSize = static_cast<U32>(vLi.QuadPart);
     CryptoPP::CFB_Mode<CryptoPP::AES>::Decryption vDec {
@@ -67,7 +60,7 @@ void Store::X_ReadAll(Buffer &vBuf) {
         reinterpret_cast<Byte *>(_aligned_malloc(uSize, vDec.OptimalDataAlignment())),
         &_aligned_free
     );
-    if (!ReadFile(hFile_, upCipher.get(), static_cast<DWORD>(uSize), nullptr, nullptr))
+    if (!ReadFile(uhFile.get(), upCipher.get(), static_cast<DWORD>(uSize), nullptr, nullptr))
         throw ExnSys();
     vDec.ProcessData(
         reinterpret_cast<CryptoPP::byte *>(upPlaint.get()),
@@ -98,9 +91,8 @@ void Store::X_WriteAll(Buffer &vBuf) {
         reinterpret_cast<CryptoPP::byte *>(upPlaint.get()),
         uSize
     );
-    auto hFile_ = CreateFileHandle(kszFile, GENERIC_WRITE, CREATE_ALWAYS, 0);
-    std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hFile(hFile_, &CloseHandle);
-    if (!WriteFile(hFile_, upCipher.get(), static_cast<DWORD>(uSize), nullptr, nullptr))
+    auto uhFile = CreateFileHandle(kszFile, GENERIC_WRITE, CREATE_ALWAYS, 0);
+    if (!WriteFile(uhFile.get(), upCipher.get(), static_cast<DWORD>(uSize), nullptr, nullptr))
         throw ExnSys();
 }
 

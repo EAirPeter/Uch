@@ -13,8 +13,10 @@ public:
     IoGroup &operator =(const IoGroup &) = delete;
     IoGroup &operator =(IoGroup &&) = delete;
 
-    inline IoGroup(DWORD dwTickMilli = 10, DWORD dwThreads = GetProcessors()) :
-        x_dwThreads(dwThreads), x_dwTickMilli(dwTickMilli)
+    inline IoGroup(
+        TP_CALLBACK_PRIORITY vPrior = TP_CALLBACK_PRIORITY_NORMAL,
+        DWORD dwTickMilli = 10, DWORD dwThreads = GetProcessors()
+    ) : x_vPrior(vPrior), x_dwThreads(dwThreads), x_dwTickMilli(dwTickMilli)
     {
         InitializeThreadpoolEnvironment(&x_vTpCbEnv);
         x_pTpClGroup = CreateThreadpoolCleanupGroup();
@@ -92,6 +94,7 @@ private:
     TP_CALLBACK_ENVIRON x_vTpCbEnv;
     PTP_CLEANUP_GROUP x_pTpClGroup = nullptr;
     PTP_POOL x_pTpPool = nullptr;
+    TP_CALLBACK_PRIORITY x_vPrior;
     DWORD x_dwThreads;
     DWORD x_dwTickMilli;
 

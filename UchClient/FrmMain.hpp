@@ -15,8 +15,7 @@ class FrmMain :
     public HandlerBase<
         event::EvMessage,
         event::EvListUon,
-        event::EvListUff,
-        event::EvFileRecv
+        event::EvListUff
     >
 {
 public:
@@ -26,13 +25,11 @@ public:
     void OnEvent(event::EvMessage &e) noexcept override;
     void OnEvent(event::EvListUon &e) noexcept override;
     void OnEvent(event::EvListUff &e) noexcept override;
-    void OnEvent(event::EvFileRecv &e) noexcept override;
 
 private:
     void X_OnSend();
     void X_OnFile();
     void X_OnDestroy(const nana::arg_destroy &e);
-    void X_OnUser(const nana::arg_user &e);
 
     void X_AddMessage(const String &sWho, const String &sWhat);
 

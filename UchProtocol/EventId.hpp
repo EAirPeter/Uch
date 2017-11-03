@@ -36,7 +36,6 @@ namespace protocol {
             kMessage,
             kFileReq,
             kFileRes,
-            kFileCancel,
             x_kEnd,
         };
     }

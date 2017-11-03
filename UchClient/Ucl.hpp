@@ -11,6 +11,7 @@
 
 #define USG_NAME Ucl
 #define USG_MEMBERS \
+    USG_VAL(String, Ucf, x_sUchFile, {}) \
     USG_VAL(UclCfg, Cfg, x_vConfig, {}) \
     USG_VAL(IoGroup, Iog, x_vIoGroup, {}) \
     USG_VAL(EventBus, Bus, x_vEventBus, {x_vIoGroup}) \

@@ -95,11 +95,6 @@ namespace protocol {
 #   define UEV_NAME EvpFileRes
 #   define UEV_MEMBERS UEV_VAL(U64, uId) UEV_VAL(bool, bAccepted) UEV_END(U16, uPort)
 #   include "../UchCommon/GenEvent.inl"
-    
-#   define UEV_ID p2pchat::kFileCancel
-#   define UEV_NAME EvpFileCancel
-#   define UEV_MEMBERS UEV_END(U64, uId)
-#   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID ucpfile::kFile
 #   define UEV_NAME EvuFile

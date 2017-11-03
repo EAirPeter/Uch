@@ -2,8 +2,6 @@
 
 #include "Common.hpp"
 
-#include <nana/gui/widgets/listbox.hpp>
-
 namespace protocol {
 #   define UEV_NAME OnlineUser
 #   define UEV_NOTEV

@@ -12,9 +12,15 @@ private:
 
 };
 
-USize GetProcessors() noexcept;
+using UniqueHandle = std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)>;
 
-HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags);
+U32 GetProcessors() noexcept;
+
+UniqueHandle CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags);
+HANDLE CreateFileHandleInherit(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags);
+
+U64 GetFileSize(HANDLE hFile);
+void SetFileSize(HANDLE hFile, U64 uSize);
 
 U64 GetTimeStamp() noexcept;
 

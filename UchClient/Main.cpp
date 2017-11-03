@@ -13,6 +13,10 @@ Ucl Ucl::x_vInstance {};
 int wmain() {
     try {
         System::GlobalStartup();
+        auto dwb = GetModuleFileNameW(nullptr, g_szWideBuf, STRCVT_BUFSIZE);
+        auto sAppName = String {g_szWideBuf, dwb};
+        sAppName.resize(sAppName.rfind(L'\\'));
+        Ucl::Ucf() = sAppName + L"\\UchFile.exe";
         Ucl::Cfg().Load();
         Ucl::Cfg().Save();
         Ucl::Iog().Start();

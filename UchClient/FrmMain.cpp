@@ -1,7 +1,6 @@
 #include "Common.hpp"
 
-#include "FrmFileRecv.hpp"
-#include "FrmFileSend.hpp"
+#include "FileSend.hpp"
 #include "FrmMain.hpp"
 #include "Ucl.hpp"
 
@@ -16,7 +15,6 @@ FrmMain::FrmMain() :
 {
     caption(String {L"Uch - Client ["} + Ucl::Usr() + L"]");
     events().destroy(std::bind(&FrmMain::X_OnDestroy, this, std::placeholders::_1));
-    events().user(std::bind(&FrmMain::X_OnUser, this, std::placeholders::_1));
     events().unload([this] (const arg_unload &e) {
         msgbox mbx {e.window_handle, u8"Uch - Exit", msgbox::yes_no};
         mbx.icon(msgbox::icon_question);
@@ -101,9 +99,6 @@ void FrmMain::OnEvent(event::EvListUff &e) noexcept {
         }
     );
 }
-void FrmMain::OnEvent(event::EvFileRecv &e) noexcept {
-    user(new event::EvFileRecv(e));
-}
 
 void FrmMain::X_OnSend() {
     auto vec = x_lbxUsers.selected();
@@ -159,7 +154,9 @@ void FrmMain::X_OnFile() {
     if (!fbx())
         return;
     auto sPath = AsWideString(fbx.file());
-    form_loader<FrmFileSend> {}(sUser, sPath).show();
+    auto pPipl = &(*Ucl::Pmg())[sUser];
+    // will leak of course, just let it go
+    new FileSend(pPipl, sPath);
 }
 
 void FrmMain::X_OnDestroy(const nana::arg_destroy &e) {
@@ -167,13 +164,6 @@ void FrmMain::X_OnDestroy(const nana::arg_destroy &e) {
     Ucl::Con()->Shutdown();
     Ucl::Pmg()->Shutdown();
     Ucl::Bus().Unregister(*this);
-}
-
-void FrmMain::X_OnUser(const nana::arg_user &e) {
-    std::unique_ptr<event::EvFileRecv> up {
-        reinterpret_cast<event::EvFileRecv *>(e.param)
-    };
-    form_loader<FrmFileRecv> {}(*up).show();
 }
 
 void FrmMain::X_AddMessage(const String &sWho, const String &sWhat) {

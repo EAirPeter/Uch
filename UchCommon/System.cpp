@@ -36,19 +36,45 @@ System::~System() {
     WSACleanup();
 }
 
-USize GetProcessors() noexcept {
+U32 GetProcessors() noexcept {
     SYSTEM_INFO vSysInfo;
     GetSystemInfo(&vSysInfo);
-    return vSysInfo.dwNumberOfProcessors;
+    return static_cast<U32>(vSysInfo.dwNumberOfProcessors);
 }
 
-HANDLE CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags) {
+UniqueHandle CreateFileHandle(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags) {
     auto hFile = CreateFileW(
         sPath.c_str(), dwAccess, 0, nullptr, dwCreation, dwFlags, nullptr
     );
     if (hFile == INVALID_HANDLE_VALUE)
         throw ExnSys();
+    return {hFile, &CloseHandle};
+}
+
+HANDLE CreateFileHandleInherit(const String &sPath, DWORD dwAccess, DWORD dwCreation, DWORD dwFlags) {
+    SECURITY_ATTRIBUTES vSecAttr {static_cast<DWORD>(sizeof(SECURITY_ATTRIBUTES)), nullptr, true};
+    auto hFile = CreateFileW(
+        sPath.c_str(), dwAccess, 0, &vSecAttr, dwCreation, dwFlags, nullptr
+    );
+    if (hFile == INVALID_HANDLE_VALUE)
+        throw ExnSys();
     return hFile;
+}
+
+U64 GetFileSize(HANDLE hFile) {
+    LARGE_INTEGER vLi;
+    if (!GetFileSizeEx(hFile, &vLi))
+        throw ExnSys();
+    return static_cast<U64>(vLi.QuadPart);
+}
+
+void SetFileSize(HANDLE hFile, U64 uSize) {
+    LARGE_INTEGER vLi;
+    vLi.QuadPart = static_cast<I64>(uSize);
+    if (!SetFilePointerEx(hFile, vLi, nullptr, FILE_BEGIN))
+        throw ExnSys();
+    if (!SetEndOfFile(hFile))
+        throw ExnSys();
 }
 
 U64 GetTimeStamp() noexcept {

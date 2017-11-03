@@ -8,6 +8,14 @@ struct SockName {
 
     operator String() const;
 
+    constexpr U16 GetPort() const noexcept {
+        return reinterpret_cast<const sockaddr_in *>(&vSockAddr)->sin_port;
+    }
+
+    constexpr void SetPort(U16 uPort) noexcept {
+        reinterpret_cast<sockaddr_in *>(&vSockAddr)->sin_port = uPort;
+    }
+
 };
 
 BUFOPR(SockName)

@@ -23,5 +23,4 @@ private:
     ConditionVariable x_cv;
     bool x_bDone = false;
 
-
 };

@@ -145,12 +145,13 @@
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
     <ClInclude Include="Event.hpp" />
+    <ClInclude Include="FileSend.hpp" />
     <ClInclude Include="FrmFileRecv.hpp" />
     <ClInclude Include="FrmFileSend.hpp" />
     <ClInclude Include="FrmMain.hpp" />
     <ClInclude Include="FrmRecoPass.hpp" />
     <ClInclude Include="FrmRecoUser.hpp" />
-    <ClInclude Include="OnFileReq.hpp" />
+    <ClInclude Include="FileRecv.hpp" />
     <ClInclude Include="UccPipl.hpp" />
     <ClInclude Include="Ucl.hpp" />
     <ClInclude Include="UclCfg.hpp" />
@@ -160,15 +161,26 @@
     <ClInclude Include="UclPipl.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="FileSend.cpp" />
     <ClCompile Include="FrmEntry.cpp" />
-    <ClCompile Include="FrmFileRecv.cpp" />
-    <ClCompile Include="FrmFileSend.cpp" />
+    <ClCompile Include="FrmFileRecv.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="FrmFileSend.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="FrmMain.cpp" />
     <ClCompile Include="FrmRecoPass.cpp" />
     <ClCompile Include="FrmRecoUser.cpp" />
     <ClCompile Include="FrmRegister.cpp" />
     <ClCompile Include="Main.cpp" />
-    <ClCompile Include="OnFileReq.cpp" />
+    <ClCompile Include="FileRecv.cpp" />
     <ClCompile Include="PeerManager.cpp" />
     <ClCompile Include="UccPipl.cpp" />
     <ClCompile Include="UclPipl.cpp" />

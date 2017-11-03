@@ -60,7 +60,7 @@ FrmFileSend::FrmFileSend(const String &sWhom, const String &sPath) :
     x_vSn = x_pPipl->GetLower().GetRemoteSockName();
     HANDLE hFile;
     try {
-        hFile = CreateFileHandle(sPath, GENERIC_READ, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED);
+        hFile = CreateFileHandle(sPath, GENERIC_READ, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED).release();
     }
     catch (ExnSys e) {
         nana::msgbox mbx {u8"Uch - Send file"};

@@ -1,7 +1,7 @@
 #include "Common.hpp"
 
 #include "Event.hpp"
-#include "OnFileReq.hpp"
+#include "FileRecv.hpp"
 #include "UccPipl.hpp"
 #include "Ucl.hpp"
 
@@ -27,13 +27,11 @@ void UccPipl::OnPacket(Buffer vPakBuf) noexcept {
         Ucl::Bus().PostEvent(event::EvMessage {ChatMessage {x_sUser, vPakBuf.Read<EvpMessage>().sMessage}});
         break;
     case p2pchat::kFileReq:
-        Ucl::Iog().PostJob(&OnFileReq::X_Run, new OnFileReq(this, vPakBuf.Read<EvpFileReq>()));
+        // will leak of course, just let it go
+        Ucl::Iog().PostJob(&FileRecv::Run, this, vPakBuf.Read<EvpFileReq>());
         break;
     case p2pchat::kFileRes:
         Ucl::Bus().PostEvent(vPakBuf.Read<EvpFileRes>());
-        break;
-    case p2pchat::kFileCancel:
-        Ucl::Bus().PostEvent(vPakBuf.Read<EvpFileCancel>());
         break;
     default:
         assert(false); // wtf???

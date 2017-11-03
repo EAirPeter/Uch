@@ -5,7 +5,6 @@
 #include "IntrList.hpp"
 
 struct ChunkIoContext : public OVERLAPPED {
-    void *pParam;
     void (*pfnIoCallback)(void *pParam, DWORD dwRes, U32 uDone, ChunkIoContext *pCtx) noexcept;
 };
 

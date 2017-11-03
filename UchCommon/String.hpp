@@ -29,9 +29,17 @@ inline String AsWideString(const std::string &sUtf8) {
 }
 
 template<class ...tvArgs>
-inline String Format(const wchar_t *pszFmt, tvArgs &&...vArgs) {
-    StringCchPrintfW(g_szWideBuf, STRCVT_BUFSIZE, pszFmt, std::forward<tvArgs>(vArgs)...);
-    return {g_szWideBuf};
+inline U16 Format(const wchar_t *pszFmt, tvArgs &&...vArgs) {
+    auto nRes = swprintf_s(g_szWideBuf, STRCVT_BUFSIZE, pszFmt, std::forward<tvArgs>(vArgs)...);
+    if (nRes == -1)
+        throw ExnIllegalArg {};
+    return static_cast<U16>(nRes);
+}
+
+template<class ...tvArgs>
+inline String FormatString(const wchar_t *pszFmt, tvArgs &&...vArgs) {
+    auto uLen = Format(pszFmt, std::forward<tvArgs>(vArgs)...);
+    return {g_szWideBuf, uLen};
 }
 
 String FormatSize(U64 uSize, PCWSTR pszGiga, PCWSTR pszMega, PCWSTR pszKilo, PCWSTR pszUnit);

@@ -26,10 +26,6 @@ public:
     FileIo(const FileIo &) = delete;
     FileIo(FileIo &&) = delete;
 
-    ~FileIo() {
-        X_CloseFile();
-    }
-
     FileIo &operator =(const FileIo &) = delete;
     FileIo &operator =(FileIo &&) = delete;
 
@@ -116,16 +112,10 @@ private:
 
     inline void X_EndIo() noexcept {
         auto uState = x_atmuState.fetch_sub(1);
-        if ((uState & x_kubStopping) && (uState & x_kumPending) == 1) {
-            X_CloseFile();
+        if ((uState & x_kubStopping) && (uState & x_kumPending) == 1)
             X_Finalize();
-        }
     }
 
-    inline void X_CloseFile() noexcept {
-        if (!(x_atmuState.fetch_or(x_kubClosed) & x_kubClosed))
-            CloseHandle(x_hFile);
-    }
 
 private:
     template<class tChunk>
@@ -168,8 +158,7 @@ private:
     constexpr static U32 x_kubStopping = 0x80000000;
     constexpr static U32 x_kubAssigned = 0x40000000;
     constexpr static U32 x_kubFinalized = 0x20000000;
-    constexpr static U32 x_kubClosed = 0x10000000;
-    constexpr static U32 x_kumPending = 0x0fffffff;
+    constexpr static U32 x_kumPending = 0x1fffffff;
 
 private:
     Upper &x_vUpper;

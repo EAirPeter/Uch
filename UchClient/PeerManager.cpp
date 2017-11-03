@@ -7,7 +7,7 @@
 PeerManager::PeerManager() : 
     x_vLis(
         *this, 
-        CreateBoundSocket(MakeSockName(L"0.0.0.0", L"0"), true),
+        CreateBoundSocket(MakeSockName(Ucl::Cfg()[UclCfg::kszLisHost], L"0"), true),
         SOMAXCONN
     )
 {

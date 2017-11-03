@@ -27,9 +27,6 @@
     <ClInclude Include="ByteBuffer.hpp">
       <Filter>Buffer</Filter>
     </ClInclude>
-    <ClInclude Include="ByteChunk.hpp">
-      <Filter>Buffer</Filter>
-    </ClInclude>
     <ClInclude Include="Common.hpp">
       <Filter>Basis</Filter>
     </ClInclude>
@@ -95,6 +92,9 @@
     </ClInclude>
     <ClInclude Include="String.hpp">
       <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="ByteChunk.hpp">
+      <Filter>Basis</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

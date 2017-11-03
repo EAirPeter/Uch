@@ -10,6 +10,9 @@ namespace ImplFileChunk {
 
     struct FileChunk : ByteChunk<kuSize> {
         friend struct AlignHelper;
+
+        U32 uzOnPacket;
+        U32 uzPayload;
     };
 
     struct AlignHelper {
