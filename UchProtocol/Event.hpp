@@ -88,7 +88,7 @@ namespace protocol {
 
 #   define UEV_ID p2pchat::kFileReq
 #   define UEV_NAME EvpFileReq
-#   define UEV_MEMBERS UEV_VAL(U64, uId) UEV_VAL(String, sName) UEV_END(U64, uSize)
+#   define UEV_MEMBERS UEV_VAL(U64, uId) UEV_VAL(String, sName) UEV_VAL(U64, uSize) UEV_END(U16, uPort)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID p2pchat::kFileRes

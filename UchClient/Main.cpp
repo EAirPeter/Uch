@@ -3,6 +3,7 @@
 #include "../UchCommon/System.hpp"
 
 #include "FrmEntry.hpp"
+#include "FrmMain.hpp"
 #include "Ucl.hpp"
 
 #include <nana/gui.hpp>

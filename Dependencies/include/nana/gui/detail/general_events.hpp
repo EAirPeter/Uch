@@ -503,6 +503,12 @@ namespace nana
 		const arg_mouse* mouse_args{};	///< If it is not null, it refers to the mouse arguments for click event emitted by mouse, nullptr otherwise.
 	};
 
+    struct arg_user : public event_arg
+    {
+        ::nana::window window_handle;   ///< A handle to the event window
+        void *param;                    ///< A user defined parameter
+    };
+
     /// provides some fundamental events that every widget owns.
 	struct general_events
 	{
@@ -528,6 +534,8 @@ namespace nana
 		basic_event<arg_resized>	resized;	///< the window is changing its size
 
 		basic_event<arg_destroy>	destroy;	///< the window is destroyed, but occurs when all children have been destroyed
+
+        basic_event<arg_user>       user;       ///< someone has triggered a custom event
 	};
 
 	namespace detail

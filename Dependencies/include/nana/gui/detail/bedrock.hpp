@@ -89,6 +89,8 @@ namespace detail
 		events_operation&	evt_operation();
 		window_manager&		wd_manager();
 
+        void user(core_window_t *, void *param);
+
 		void manage_form_loader(core_window_t*, bool insert_or_remove);
 	public:
 		// if 'bForce__EmitInternal', then ONLY internal (widget's) events are processed (even through explicit filtering)

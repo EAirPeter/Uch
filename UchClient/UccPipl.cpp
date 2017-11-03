@@ -1,8 +1,11 @@
 #include "Common.hpp"
 
 #include "Event.hpp"
+#include "OnFileReq.hpp"
 #include "UccPipl.hpp"
 #include "Ucl.hpp"
+
+#include <nana/gui.hpp>
 
 UccPipl::UccPipl(SOCKET hSocket) : Pipeline(*this, hSocket) {}
 
@@ -24,7 +27,7 @@ void UccPipl::OnPacket(Buffer vPakBuf) noexcept {
         Ucl::Bus().PostEvent(event::EvMessage {ChatMessage {x_sUser, vPakBuf.Read<EvpMessage>().sMessage}});
         break;
     case p2pchat::kFileReq:
-        vPakBuf.Read<EvpFileReq>();
+        Ucl::Iog().PostJob(&OnFileReq::X_Run, new OnFileReq(this, vPakBuf.Read<EvpFileReq>()));
         break;
     case p2pchat::kFileRes:
         Ucl::Bus().PostEvent(vPakBuf.Read<EvpFileRes>());

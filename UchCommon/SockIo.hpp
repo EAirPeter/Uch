@@ -87,12 +87,12 @@ public:
         };
         pChunk->pfnIoCallback = X_FwdOnRecv<tChunk>;
         DWORD dwFlags = 0;
-        StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(x_kucRecv);
         if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
             X_EndRecv();
             throw ExnIllegalState {};
         }
+        StartThreadpoolIo(x_pTpIo);
         auto nRes = WSARecv(x_hSocket, &vWsaBuf, 1, nullptr, &dwFlags, pChunk, nullptr);
         if (nRes == SOCKET_ERROR) {
             nRes = WSAGetLastError();
@@ -111,12 +111,12 @@ public:
             reinterpret_cast<char *>(pChunk->GetReader())
         };
         pChunk->pfnIoCallback = X_FwdOnSend<tChunk>;
-        StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(x_kucSend);
         if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
             X_EndSend();
             throw ExnIllegalState {};
         }
+        StartThreadpoolIo(x_pTpIo);
         auto nRes = WSASend(x_hSocket, &vWsaBuf, 1, nullptr, 0, pChunk, nullptr);
         if (nRes == SOCKET_ERROR) {
             nRes = WSAGetLastError();
@@ -130,12 +130,12 @@ public:
 
     inline void Transmit(TRANSMIT_PACKETS_ELEMENT *pPaks, U32 ucPaks, U32 uzMss, ChunkIoContext *pCtx) {
         pCtx->pfnIoCallback = X_FwdOnTransmit;
-        StartThreadpoolIo(x_pTpIo);
         auto uState = x_atmuState.fetch_add(x_kucSend);
         if (!(uState & x_kubAssigned) || (uState & x_kubStopping)) {
             X_EndSend();
             throw ExnIllegalState {};
         }
+        StartThreadpoolIo(x_pTpIo);
         auto dwbRes = wsaimp::TransmitPackets(
             x_hSocket, pPaks, static_cast<DWORD>(ucPaks),
             static_cast<DWORD>(uzMss), pCtx, TF_USE_KERNEL_APC

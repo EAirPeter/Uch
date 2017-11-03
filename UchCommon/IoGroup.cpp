@@ -13,6 +13,7 @@ void IoGroup::Start() {
     SetThreadpoolThreadMaximum(x_pTpPool, x_dwThreads);
     SetThreadpoolThreadMinimum(x_pTpPool, x_dwThreads);
     SetThreadpoolCallbackPool(&x_vTpCbEnv, x_pTpPool);
+    SetThreadpoolCallbackPriority(&x_vTpCbEnv, TP_CALLBACK_PRIORITY_HIGH);
     if (x_dwTickMilli) {
         x_vTimerCtx.pTpTimer = CreateThreadpoolTimer(X_TpcbOnTimer, &x_vTimerCtx, &x_vTpCbEnv);
         if (!x_vTimerCtx.pTpTimer) {

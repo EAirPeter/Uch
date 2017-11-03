@@ -36,3 +36,13 @@ U16 ConvertWideToUtf8(const String &sWide) {
         throw ExnArgTooLarge {sWide.size(), 65535};
     return ConvertWideToUtf8(sWide.c_str(), static_cast<int>(sWide.size()));
 }
+
+String FormatSize(U64 uSize, PCWSTR pszGiga, PCWSTR pszMega, PCWSTR pszKilo, PCWSTR pszUnit) {
+    if (uSize > (1U << 30))
+        return Format(L"%.3f %s", static_cast<double>(uSize) / static_cast<double>(1U << 30), pszGiga);
+    if (uSize > (1U << 20))
+        return Format(L"%.3f %s", static_cast<double>(uSize) / static_cast<double>(1U << 20), pszMega);
+    if (uSize > (1U << 10))
+        return Format(L"%.3f %s", static_cast<double>(uSize) / static_cast<double>(1U << 10), pszKilo);
+    return Format(L"%u %s", static_cast<unsigned>(uSize), pszUnit);
+}

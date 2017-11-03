@@ -8,6 +8,7 @@
 #include "UccPipl.hpp"
 
 #include <nana/gui.hpp>
+#include <nana/gui/timer.hpp>
 #include <nana/gui/widgets/button.hpp>
 #include <nana/gui/widgets/label.hpp>
 #include <nana/gui/widgets/progress.hpp>
@@ -20,13 +21,13 @@ class FrmFileSend :
     >
 {
 public:
-    FrmFileSend(const nana::form &frmParent, const String &sWhom, const String &sPath);
+    FrmFileSend(const String &sWhom, const String &sPath);
 
 public:
     void OnEvent(protocol::EvpFileRes &e) noexcept override;
 
 private:
-    void X_OnDestroy(const nana::arg_unload &e);
+    void X_OnDestroy(const nana::arg_destroy &e);
 
 public:
     bool OnTick(U64 usNow) noexcept;
@@ -47,9 +48,9 @@ private:
 
 private:
     struct X_Proxy {
-        void OnFinalize();
-        void OnForciblyClose();
-        void OnRead(DWORD dwError, U32 uDone, FileChunk *pChunk);
+        void OnFinalize() noexcept;
+        void OnForciblyClose() noexcept;
+        void OnRead(DWORD dwError, U32 uDone, FileChunk *pChunk) noexcept;
 
         FrmFileSend *pFrm;
     };
@@ -59,19 +60,21 @@ private:
 
     RecursiveMutex x_mtx;
     ConditionVariable x_cv;
-    bool x_bStopping = false;
     bool x_bUcpDone = false;
     bool x_bFileDone = false;
     bool x_bTickDone = false;
+    std::atomic<bool> x_atmbNormalExit = false;
     std::atomic<bool> x_atmbExitNeedConfirm = true;
 
     X_Proxy x_vProxy {this};
     UccPipl *x_pPipl = nullptr;
+    SOCKET x_hSocket = INVALID_SOCKET;
     std::unique_ptr<Ucp<FrmFileSend>> x_upUcp;
     std::unique_ptr<FileIo<X_Proxy>> x_upFio;
     SockName x_vSn {};
     U64 x_uzFileSize = 0;
     U64 x_uzUcpSize = 0;
+    String x_sFileSize;
     std::atomic<U64> x_atmuzFilePos = 0;
     std::atomic<U32> x_atmucFileChunks = 0;
     U64 x_uzSentSec = 0;

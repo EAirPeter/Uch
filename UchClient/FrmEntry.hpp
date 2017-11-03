@@ -17,7 +17,8 @@ private:
     void X_OnLogin();
     void X_OnRegister();
     void X_OnForget();
-    void X_OnDestroy(const nana::arg_unload &e);
+    void X_OnDestroy(const nana::arg_destroy &e);
+    void X_OnUser(const nana::arg_user &e);
 
 private:
     nana::place x_pl {*this};
@@ -27,5 +28,8 @@ private:
     nana::button x_btnForget {*this};
     nana::textbox x_txtUsername {*this};
     nana::textbox x_txtPassword {*this};
+
+private:
+    std::atomic<bool> x_atmbMain = false;
 
 };

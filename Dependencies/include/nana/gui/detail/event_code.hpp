@@ -39,6 +39,8 @@ namespace nana
 		key_release,		///< A keyboard is released on a focus widget.
 		shortkey,			///< The widgets received a shortkey message.
 
+        user,               ///< A user customed event
+
 		elapse,				///< Unoperational events? . A widget received a tick that is sended by timer.
 
 		end					///< End indicator, it's not an event.

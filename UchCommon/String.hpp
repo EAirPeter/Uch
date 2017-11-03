@@ -30,6 +30,8 @@ inline String AsWideString(const std::string &sUtf8) {
 
 template<class ...tvArgs>
 inline String Format(const wchar_t *pszFmt, tvArgs &&...vArgs) {
-    wsprintfW(g_szWideBuf, pszFmt, std::forward<tvArgs>(vArgs)...);
+    StringCchPrintfW(g_szWideBuf, STRCVT_BUFSIZE, pszFmt, std::forward<tvArgs>(vArgs)...);
     return {g_szWideBuf};
 }
+
+String FormatSize(U64 uSize, PCWSTR pszGiga, PCWSTR pszMega, PCWSTR pszKilo, PCWSTR pszUnit);

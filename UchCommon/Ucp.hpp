@@ -9,8 +9,6 @@
 #include "Sync.hpp"
 #include "UcpSeg.hpp"
 
-#include "Debug.hpp"
-
 #define UCP_TRANSMIT
 
 namespace ImplUcp {
@@ -20,15 +18,6 @@ namespace ImplUcp {
             uVal -= uVal & (0 - uVal);
         return uVal;
     }
-
-#if 0
-#   define UCP_DBGOUT(...) DBG_PRINTLN( \
-        L"[Ucp ", std::setw(4), std::setfill(L'0'), std::hex, std::uppercase, ((UPtr) this & 0xffff), \
-        L"][", std::setw(18), std::setfill(L' '), __func__, "] ", std::dec, __VA_ARGS__ \
-    )
-#else
-#   define UCP_DBGOUT(...) ((void) 0)
-#endif
 
     template<class tUpper>
     class Ucp {
@@ -107,10 +96,6 @@ namespace ImplUcp {
         inline void Close() noexcept {
             RAII_LOCK(x_mtx);
             x_vState += x_kubStopping;
-            if (x_pIoGroup) {
-                x_pIoGroup->UnregisterTick(*this);
-                x_pIoGroup = nullptr;
-            }
             x_vLower.Close();
         }
 
@@ -124,7 +109,6 @@ namespace ImplUcp {
             auto upSeg = x_vPool.Wrap(pSeg);
             if (dwError) {
                 // just let the RDT handle this
-                ImplDbg::Println("read fail");
                 {
                     RAII_LOCK(x_mtx);
                     if (x_vState(x_kubConnLost))
@@ -236,7 +220,7 @@ namespace ImplUcp {
         }
 
         inline void PostBuffer(UcpBuffer &&vBuf) {
-            PostPacket(vBuf);
+            PostBuffer(vBuf);
         }
         template<class tPacket>
         inline void PostPacket(tPacket &&vPacket) {
@@ -329,10 +313,8 @@ namespace ImplUcp {
         }
 
         inline void X_UpdateRtt(UcpSeg *pSeg) noexcept {
-            if (pSeg->ucSent != 1) {
-                UCP_DBGOUT("ignored");
+            if (pSeg->ucSent != 1)
                 return;
-            }
             auto utRtt = x_usNow - pSeg->usSent;
             assert(static_cast<I64>(utRtt) >= 0);
             // update x_utSRtt, x_utRttVar, x_utRto according to RFC6298
@@ -346,12 +328,10 @@ namespace ImplUcp {
                 x_utSRtt = (x_utSRtt * 7 + utRtt) >> 3;
             }
             x_utRto = std::max(x_utSRtt + std::max(x_kutTick, x_utRttVar << 2), x_kutRtoMin);
-            UCP_DBGOUT("srtt = ", x_utSRtt, ", rttvar = ", x_utRttVar, ", rto = ", x_utRto);
         }
 
 #ifdef UCP_TRANSMIT
         inline bool X_Flush() {
-            UCP_DBGOUT("");
             X_PrepareSaks();
             X_PrepareQSnd();
             if (x_atmbTsm.test_and_set()) {
@@ -361,14 +341,12 @@ namespace ImplUcp {
             }
 #else
         inline void X_Flush() {
-            UCP_DBGOUT("");
             X_PrepareSaks();
             X_PrepareQSnd();
 #endif
             x_vState -= x_kubDirty | x_kubEchoed;
             if (x_vState(x_kubAsking)) {
                 if (StampDue(x_usNow, x_usAskTimeout)) {
-                    // ImplDbg::Println("ask timeout");
                     if (++x_ucAskTimedOut >= x_kucConnLost)
                         throw ExnIllegalState {};
                     x_vState += x_kubNeedAsk;
@@ -431,20 +409,13 @@ namespace ImplUcp {
             X_FlushSaks(ucRwnd);
             // update cwnd and ssthresh according to RFC5681
             if (bTimedOut) {
-                // ImplDbg::Println("timeout");
                 x_uzSsthresh = std::max(x_kuzSsthreshMin, x_uzCwnd >> 1);
                 x_uzCwnd = x_kuzCwndMin;
             }
             else if (bFastResend) {
-                // ImplDbg::Println("resend");
                 x_uzSsthresh = std::max(x_kuzSsthreshMin, std::max(x_uzCwnd, x_uzFlight) >> 1);
                 x_uzCwnd = x_uzSsthresh + x_kucFastResend * kuzMss;
             }
-            UCP_DBGOUT(
-                "ssthresh = ", x_uzSsthresh, ", cwnd = ", x_uzCwnd,
-                ", rwnd = ", x_atmuzAsm.load(), ", xrwnd = ", x_ucRmtRwnd,
-                ", now = ", x_usNow, ", next_timeout = ", x_usTimeout
-            );
 #ifdef UCP_TRANSMIT
             return true;
 #endif
@@ -459,7 +430,6 @@ namespace ImplUcp {
             std::sort(x_vecSndSaks.begin(), x_vecSndSaks.end(), std::greater<U32> {});
             auto itEnd = std::unique(x_vecSndSaks.begin(), x_vecSndSaks.end());
             x_vecSndSaks.resize(static_cast<USize>(itEnd - x_vecSndSaks.begin()));
-            UCP_DBGOUT("saks = ", x_vecSndSaks);
         }
 
         inline void X_PrepareQSnd() noexcept {
@@ -471,7 +441,6 @@ namespace ImplUcp {
                 upSeg->ucTimedOut = 0;
                 x_qSnd.PushTail(std::move(upSeg));
             }
-            UCP_DBGOUT("flight = ", x_uzFlight);
         }
 
         inline void X_FlushPayload(UcpSeg *pSeg, U32 ucRwnd) noexcept {
@@ -482,9 +451,6 @@ namespace ImplUcp {
             pSeg->ucSkipped = 0;
             pSeg->usSent = x_usNow;
             pSeg->usTimeout = x_usNow + x_utRto;
-            UCP_DBGOUT("seq = ", pSeg->unSeq, ", ack = ", pSeg->unAck,
-                ", timedout = ", pSeg->ucTimedOut, ", timeout = ", pSeg->usTimeout
-            );
             pSeg->Encode();
 #ifndef UCP_TRANSMIT
             X_PostWrite(pSeg);
@@ -501,7 +467,6 @@ namespace ImplUcp {
                     auto ubFlags = kubSegSak | (x_vState(x_kubNeedAsk) ? kubSegAsk : 0);
                     x_vState -= x_kubNeedAsk;
                     auto upSeg = x_vPool.MakeUnique(0, x_unRcvSeq, ucRwnd, uSaksToSend, ubFlags);
-                    UCP_DBGOUT("saks = ", uSaksToSend);
                     while (uSaksToSend--) {
                         upSeg->Write(&x_vecSndSaks.back(), 3);
                         x_vecSndSaks.pop_back();
@@ -518,7 +483,6 @@ namespace ImplUcp {
                 auto ubFlags = x_vState(x_kubNeedAsk) ? kubSegAsk : 0;
                 x_vState -= x_kubNeedAck | x_kubNeedAsk;
                 auto upSeg = x_vPool.MakeUnique(0, x_unRcvSeq, ucRwnd, 0, ubFlags);
-                UCP_DBGOUT("ack = ", x_unRcvSeq);
 #ifndef UCP_TRANSMIT
                 X_PostWrite(std::move(upSeg));
 #else

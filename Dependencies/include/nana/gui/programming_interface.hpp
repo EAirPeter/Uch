@@ -424,6 +424,8 @@ namespace API
 
 	void at_safe_place(window, std::function<void()>);
 
+    void user(window, void *param);     ///< Post a user customed event
+
 	/// Returns a widget content extent size
 	/**
 	 * @param wd A handle to a window that returns its content extent size.

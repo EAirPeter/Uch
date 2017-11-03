@@ -1,5 +1,6 @@
 #include "Common.hpp"
 
+#include "FrmFileRecv.hpp"
 #include "FrmFileSend.hpp"
 #include "FrmMain.hpp"
 #include "Ucl.hpp"
@@ -8,13 +9,21 @@
 
 using namespace nana;
 
-FrmMain::FrmMain(const nana::form &frmParent) :
-    form(frmParent, {768, 480}, appear::decorate<
+FrmMain::FrmMain() :
+    form(nullptr, {768, 480}, appear::decorate<
         appear::taskbar, appear::minimize, appear::maximize, appear::sizable
     >())
 {
     caption(String {L"Uch - Client ["} + Ucl::Usr() + L"]");
-    events().unload(std::bind(&FrmMain::X_OnDestroy, this, std::placeholders::_1));
+    events().destroy(std::bind(&FrmMain::X_OnDestroy, this, std::placeholders::_1));
+    events().user(std::bind(&FrmMain::X_OnUser, this, std::placeholders::_1));
+    events().unload([this] (const arg_unload &e) {
+        msgbox mbx {e.window_handle, u8"Uch - Exit", msgbox::yes_no};
+        mbx.icon(msgbox::icon_question);
+        mbx << L"Are you sure to exit Uch?";
+        if (mbx() != mbx.pick_yes)
+            e.cancel = true;
+    });
     x_btnSend.caption(L"Send");
     x_btnSend.events().click(std::bind(&FrmMain::X_OnSend, this));
     x_btnSend.events().key_press([this] (const arg_keyboard &e) {
@@ -92,6 +101,9 @@ void FrmMain::OnEvent(event::EvListUff &e) noexcept {
         }
     );
 }
+void FrmMain::OnEvent(event::EvFileRecv &e) noexcept {
+    user(new event::EvFileRecv(e));
+}
 
 void FrmMain::X_OnSend() {
     auto vec = x_lbxUsers.selected();
@@ -143,25 +155,25 @@ void FrmMain::X_OnFile() {
         return;
     }
     auto sUser = AsWideString(x_lbxUsers.at(idx.cat).at(idx.item).text(0));
-    filebox fb {*this, true};
-    if (!fb())
+    filebox fbx {*this, true};
+    if (!fbx())
         return;
-    auto sPath = AsWideString(fb.file());
-    form_loader<FrmFileSend> {}(*this, sUser, sPath).show();
+    auto sPath = AsWideString(fbx.file());
+    form_loader<FrmFileSend> {}(sUser, sPath).show();
 }
 
-void FrmMain::X_OnDestroy(const nana::arg_unload &e) {
-    msgbox mbx {e.window_handle, u8"Uch - Exit", msgbox::yes_no};
-    mbx.icon(msgbox::icon_question);
-    mbx << L"Are you sure to exit Uch?";
-    if (mbx() != mbx.pick_yes) {
-        e.cancel = true;
-        return;
-    }
+void FrmMain::X_OnDestroy(const nana::arg_destroy &e) {
     Ucl::Con()->PostPacket(protocol::EvcExit {Ucl::Usr()});
     Ucl::Con()->Shutdown();
     Ucl::Pmg()->Shutdown();
     Ucl::Bus().Unregister(*this);
+}
+
+void FrmMain::X_OnUser(const nana::arg_user &e) {
+    std::unique_ptr<event::EvFileRecv> up {
+        reinterpret_cast<event::EvFileRecv *>(e.param)
+    };
+    form_loader<FrmFileRecv> {}(*up).show();
 }
 
 void FrmMain::X_AddMessage(const String &sWho, const String &sWhat) {

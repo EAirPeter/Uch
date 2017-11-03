@@ -18,6 +18,7 @@
 #include <MSWSock.h>
 
 #include <malloc.h>
+#include <strsafe.h>
 
 #include <algorithm>
 #include <atomic>
