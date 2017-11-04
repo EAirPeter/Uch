@@ -146,6 +146,7 @@
   <ItemGroup>
     <ClInclude Include="Common.hpp" />
     <ClCompile Include="Common.cpp" />
+    <ClInclude Include="IpcData.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -124,12 +124,12 @@ void FrmEntry::X_OnUser(const nana::arg_user &e) {
         return;
     }
     Ucl::Usr() = x_txtUsername.caption_wstring();
+    Ucl::Upx() = FormatString(L"Uch [%s] - ", Ucl::Usr().c_str());
     auto &frmMain = form_loader<FrmMain, false> {}();
     for (auto &vMsg : up->vecMsgFf) {
-        Ucl::Bus().PostEvent(event::EvMessage {protocol::ChatMessage {
-            String {L"(Offline) "} + std::move(vMsg.sFrom),
-            std::move(vMsg.sMessage)
-        }});
+        Ucl::Bus().PostEvent(event::EvMessage {
+            kszCatFmsg, std::move(vMsg.sFrom), kszSelf, std::move(vMsg.sMessage)
+        });
     }
     Ucl::Pmg()->SetFfline(up->vecUsrFf);
     Ucl::Pmg()->SetOnline(up->vecUsrOn);

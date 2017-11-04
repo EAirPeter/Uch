@@ -9,12 +9,13 @@ namespace event {
         kMessage = protocol::kEnd,
         kListUon,
         kListUff,
+        kFileReq,
         kEnd,
     };
 
 #   define UEV_ID kMessage
 #   define UEV_NAME EvMessage
-#   define UEV_MEMBERS UEV_END(protocol::ChatMessage, vMsg)
+#   define UEV_MEMBERS UEV_VAL(String, sCat) UEV_VAL(String, sFrom) UEV_VAL(String, sTo) UEV_END(String, sWhat)
 #   include "../UchCommon/GenEvent.inl"
 
 #   define UEV_ID kListUon
@@ -25,6 +26,11 @@ namespace event {
 #   define UEV_ID kListUff
 #   define UEV_NAME EvListUff
 #   define UEV_MEMBERS UEV_END(std::vector<String>, vecUff)
+#   include "../UchCommon/GenEvent.inl"
+
+#   define UEV_ID kFileReq
+#   define UEV_NAME EvFileReq
+#   define UEV_MEMBERS UEV_VAL(UccPipl *, pPipl) UEV_END(protocol::EvpFileReq, eReq)
 #   include "../UchCommon/GenEvent.inl"
 
 }

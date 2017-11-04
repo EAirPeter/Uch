@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <cinttypes>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>

@@ -57,12 +57,6 @@
     <ClInclude Include="Event.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="FileRecv.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FileSend.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="FrmEntry.cpp">
@@ -96,12 +90,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="PeerManager.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FileRecv.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="FileSend.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

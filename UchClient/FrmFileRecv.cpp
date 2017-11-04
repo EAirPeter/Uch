@@ -1,25 +1,55 @@
 #include "Common.hpp"
 
+#include "../UchFile/IpcData.hpp"
+
 #include "FrmFileRecv.hpp"
 #include "Ucl.hpp"
 
+#include <nana/gui/filebox.hpp>
+
 using namespace nana;
 
-FrmFileRecv::FrmFileRecv(const event::EvFileRecv &e) :
-    form(nullptr, {480, 180}, appear::decorate<appear::taskbar, appear::minimize>()),
-    x_uzFileSize(e.uSize), x_uzUcpSize((e.uSize + kuzUcpPayload - 1) * kuzUcpHeader + e.uSize),
-    x_sFileSize(String {L" / "} + FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B")),
-    x_sFilePath(e.sPath)
+FrmFileRecv::FrmFileRecv(const nana::form &frmParent, UccPipl *pPipl, const protocol::EvpFileReq &e) :
+    form(frmParent, {480, 240}, appear::decorate<appear::taskbar, appear::minimize>()),
+    x_uId(e.uId), x_pPipl(pPipl), x_uzFileSize(e.uSize)
 {
-    caption(String {L"Uch - Receiving file from ["} + e.pPipl->GetUser() + L"]");
+    RAII_LOCK(x_mtx);
+    Ucl::Bus().Register(*this);
+    msgbox mbx {frmParent, TitleU8(L"Receive file"), msgbox::yes_no};
+    mbx.icon(msgbox::icon_question);
+    mbx << e.sName << L" [" << FormatSize(e.uSize, L"GiB", L"MiB", L"KiB", L"B") << L"]\n";
+    mbx << L"Receive the file from [" << pPipl->GetUser() << L"]?";
+    if (mbx() != msgbox::pick_yes) {
+        pPipl->PostPacket(protocol::EvpFileRes {
+            e.uId, false, 0
+        });
+        throw ExnIllegalState {};
+    }
+    filebox fbx {frmParent, false};
+    fbx.init_file(AsUtf8String(e.sName));
+    if (!fbx()) {
+        pPipl->PostPacket(protocol::EvpFileRes {
+            e.uId, false, 0
+        });
+        throw ExnIllegalState {};
+    }
+    x_sFilePath = AsWideString(fbx.file());
+    x_sFileName = x_sFilePath.substr(x_sFilePath.rfind(L'\\') + 1);
+    x_su8MbxTitle = TitleU8(FormatString(L"Receive [%s] from [%s]", x_sFileName.c_str(), pPipl->GetUser().c_str()));
+    caption(Title(FormatString(L"Receiving [%s] from [%s]...", x_sFileName.c_str(), pPipl->GetUser().c_str())));
     events().destroy(std::bind(&FrmFileRecv::X_OnDestroy, this, std::placeholders::_1));
+    events().user(std::bind(&FrmFileRecv::X_OnUser, this));
     events().unload([this] (const arg_unload &e) {
-        if (x_atmbExitNeedConfirm.load()) {
-            msgbox mbx {e.window_handle, u8"Uch - Receive file", msgbox::yes_no};
+        if (x_bAskCancel) {
+            msgbox mbx {*this, x_su8MbxTitle, msgbox::yes_no};
             mbx.icon(msgbox::icon_question);
             mbx << L"Are you sure to cancel?";
-            if (mbx() != mbx.pick_yes)
+            if (mbx() != mbx.pick_yes) {
                 e.cancel = true;
+                return;
+            }
+            x_pPipl->PostPacket(protocol::EvpFileCancel {x_uId});
+            x_bCanceling = true;
         }
     });
     x_btnCancel.caption(L"Cancel");
@@ -28,9 +58,9 @@ FrmFileRecv::FrmFileRecv(const event::EvFileRecv &e) :
         if (e.key == keyboard::enter)
             close();
     });
-    x_lblName.caption(e.sPath);
-    x_lblState.caption(L"Transmitting @ 0 B/s...");
-    x_lblProg.text_align(align::right, align_v::center).caption(String {L"0B"} + x_sFileSize);
+    x_lblName.caption(x_sFilePath);
+    x_lblState.caption(L"Receiving...\nUpload = 0 B/s\nDownload = 0 B/s");
+    x_lblProg.text_align(align::right, align_v::center).caption(String {L"0B"});
     x_pgbProg.amount(x_kucBarAmount);
     x_pl.div(
         "margin=[14,16] vert"
@@ -46,192 +76,167 @@ FrmFileRecv::FrmFileRecv(const event::EvFileRecv &e) :
     x_pl["Stat"] << x_lblState;
     x_pl["Canc"] << x_btnCancel;
     x_pl.collocate();
-    HANDLE hFile;
-    try {
-        hFile = CreateFileHandle(
-            x_sFilePath, GENERIC_WRITE, CREATE_ALWAYS,
-            FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED
-        );
-        LARGE_INTEGER vLi;
-        vLi.QuadPart = static_cast<I64>(
-            (x_uzFileSize + FileChunk::kCapacity - 1) & ~static_cast<U64>(FileChunk::kCapacity - 1)
-        );
-        auto dwb = SetFilePointerEx(hFile, vLi, nullptr, FILE_BEGIN);
-        if (!dwb)
-            throw ExnSys();
-        dwb = SetEndOfFile(hFile);
-        if (!dwb)
-            throw ExnSys();
-    }
-    catch (ExnSys e_) {
-        e.pPipl->PostPacket(protocol::EvpFileRes {
-            e.uId, false, 0
+    x_hFile = CreateFileHandleInherit(
+        x_sFilePath, GENERIC_WRITE, CREATE_ALWAYS,
+        FILE_FLAG_NO_BUFFERING | FILE_FLAG_OVERLAPPED
+    );
+    x_hSocket = CreateBoundSocket(MakeSockName(Ucl::Cfg()[UclCfg::kszLisHost], L"0"), false);
+    auto vSn = pPipl->GetLower().GetRemoteSockName();
+    vSn.SetPort(e.uPort);
+    ::connect(x_hSocket, &vSn.vSockAddr, vSn.nSockLen);
+    vSn = GetLocalSockName(x_hSocket);
+    SECURITY_ATTRIBUTES vSecAttr {static_cast<DWORD>(sizeof(SECURITY_ATTRIBUTES)), nullptr, true};
+    x_hEvent = CreateEventW(&vSecAttr, TRUE, FALSE, nullptr);
+    x_hMapping = CreateFileMappingW(
+        nullptr, &vSecAttr, PAGE_READWRITE,
+        0, static_cast<DWORD>(sizeof(uchfile::IpcData)), nullptr
+    );
+    x_hMutex = CreateMutexW(&vSecAttr, FALSE, nullptr);
+    USize uAttrListSize;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &uAttrListSize);
+    STARTUPINFOEXW vSix {
+        {static_cast<DWORD>(sizeof(STARTUPINFOEXW))},
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(::operator new(uAttrListSize))
+    };
+    InitializeProcThreadAttributeList(vSix.lpAttributeList, 1, 0, &uAttrListSize);
+    HANDLE ahInherit[] {x_hFile, reinterpret_cast<HANDLE>(x_hSocket), x_hEvent, x_hMapping, x_hMutex};
+    UpdateProcThreadAttribute(
+        vSix.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        ahInherit, sizeof(ahInherit), nullptr, nullptr
+    );
+    Format(
+        L"UchFile.exe + %" CONCAT(L, PRIuPTR) L" %" CONCAT(L, PRIuPTR) L" %" CONCAT(L, PRIuPTR)
+                L" %" CONCAT(L, PRIuPTR) L" %" CONCAT(L, PRIuPTR) L" %" CONCAT(L, PRIu64),
+        reinterpret_cast<UPtr>(x_hMapping),
+        reinterpret_cast<UPtr>(x_hMutex),
+        reinterpret_cast<UPtr>(x_hFile),
+        static_cast<UPtr>(x_hSocket),
+        reinterpret_cast<UPtr>(x_hEvent),
+        e.uSize
+    );
+    auto dwbRes = CreateProcessW(
+        Ucl::Ucf().c_str(), g_szWideBuf,
+        nullptr, nullptr, true,
+        CREATE_NEW_CONSOLE | HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
+        nullptr, nullptr,
+        &vSix.StartupInfo, &x_vPi
+    );
+    if (dwbRes) {
+        CloseHandle(std::exchange(x_hFile, INVALID_HANDLE_VALUE));
+        closesocket(std::exchange(x_hSocket, INVALID_SOCKET));
+        WaitForSingleObject(x_hEvent, INFINITE);
+        CloseHandle(std::exchange(x_hEvent, INVALID_HANDLE_VALUE));
+        Ucl::Iog().RegisterTick(*this);
+        pPipl->PostPacket(protocol::EvpFileRes {
+            e.uId,
+            true,
+            vSn.GetPort()
         });
-        nana::msgbox mbx {u8"Uch - Send file"};
-        mbx.icon(nana::msgbox::icon_error);
-        mbx << L"Cannot open file, error: " << e_.dwError;
-        mbx();
-        x_atmbExitNeedConfirm.store(false);
-        close();
-        return;
     }
-    x_upFio = std::make_unique<FileIo<X_Proxy>>(x_vProxy, hFile);
-    auto hSocket = CreateBoundSocket(MakeSockName(Ucl::Cfg()[UclCfg::kszHost], L"0"), false);
-    auto vSn = e.pPipl->GetLower().GetRemoteSockName();
-    auto *pAddr = reinterpret_cast<sockaddr_in *>(&vSn);
-    pAddr->sin_port = e.uPort;
-    ::connect(hSocket, &vSn.vSockAddr, vSn.nSockLen);
-    auto *pAddr_ = reinterpret_cast<const sockaddr_in *>(&GetLocalSockName(hSocket));
-    x_upUcp = std::make_unique<Ucp<FrmFileRecv>>(*this, hSocket);
-    Ucl::Iog().RegisterTick(*this);
-    x_upFio->AssignToIoGroup(Ucl::Iog());
-    x_upUcp->AssignToIoGroup(Ucl::Iog());
-    pAddr_ = reinterpret_cast<const sockaddr_in *>(&x_upUcp->GetLower().GetLocalSockName());
-    e.pPipl->PostPacket(protocol::EvpFileRes {
-        e.uId, true, pAddr_->sin_port
+    else {
+        msgbox mbx {*this, x_su8MbxTitle};
+        mbx.icon(msgbox::icon_error);
+        mbx << L"Failed to start the file transmitting process";
+        mbx();
+        pPipl->PostPacket(protocol::EvpFileRes {
+            e.uId,
+            false,
+            vSn.GetPort()
+        });
+        x_bAskCancel = false;
+        close();
+    }
+}
+
+void FrmFileRecv::OnEvent(protocol::EvpFileCancel &e) noexcept {
+    if (e.uId != x_uId)
+        return;
+    Ucl::Iog().PostJob([this] {
+        RAII_LOCK(x_mtx);
+        msgbox mbx {*this, x_su8MbxTitle};
+        mbx.icon(msgbox::icon_information);
+        mbx << L"[" << x_pPipl->GetUser() << L"] has canceled the transmition";
+        mbx();
+        x_bAskCancel = false;
+        close();
     });
 }
 
 void FrmFileRecv::X_OnDestroy(const arg_destroy &e) {
-    if (x_atmbNormalExit.load()) {
-        while (!(x_bUcpDone && x_bFileDone && x_bTickDone && x_bEofDone))
-            x_cv.Wait(x_mtx);
+    Ucl::Iog().UnregisterTick(*this);
+    Ucl::Bus().Unregister(*this);
+    if (x_vPi.hProcess != INVALID_HANDLE_VALUE) {
+        if (x_bCanceling)
+            TerminateProcess(x_vPi.hProcess, EXIT_FAILURE);
+        HANDLE ahWait[] {x_vPi.hProcess, x_vPi.hThread};
+        WaitForMultipleObjects(2, ahWait, TRUE, INFINITE);
+        CloseHandle(x_vPi.hProcess);
+        CloseHandle(x_vPi.hThread);
+    }
+    if (x_hFile != INVALID_HANDLE_VALUE)
+        CloseHandle(x_hFile);
+    if (x_hSocket != INVALID_SOCKET)
+        closesocket(x_hSocket);
+    if (x_hEvent != INVALID_HANDLE_VALUE)
+        CloseHandle(x_hEvent);
+    if (x_hMapping != INVALID_HANDLE_VALUE)
+        CloseHandle(x_hMapping);
+    if (x_hMutex != INVALID_HANDLE_VALUE)
+        CloseHandle(x_hMutex);
+    if (x_vPi.hProcess != INVALID_HANDLE_VALUE && !x_bCanceling) {
+        Ucl::Bus().PostEvent(event::EvMessage {
+            kszCatFile, x_pPipl->GetUser(), kszSelf,
+                x_sFilePath + L" [" + FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B") + L"]"
+        });
+    }
+}
+
+void FrmFileRecv::X_OnUser() {
+    if (x_atmbUpd.test_and_set()) {
+        // lag
         return;
     }
-    x_upFio->Shutdown();
-    try {
-        x_upUcp->PostPacket(protocol::EvuFin {});
+    auto usNow = GetTimeStamp();
+    if (!StampDue(usNow, x_usNextUpd)) {
+        x_atmbUpd.clear();
+        return;
     }
-    catch (...) {
-        // suppressed
+    x_usNextUpd = usNow + 1'000'000;
+    constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
+    WaitForSingleObject(x_hMutex, INFINITE);
+    auto pIpc = reinterpret_cast<const uchfile::IpcData *>(
+        MapViewOfFile(x_hMapping, FILE_MAP_READ, 0, 0, sizeof(uchfile::IpcData))
+    );
+    auto vIpc = *pIpc;
+    UnmapViewOfFile(pIpc);
+    ReleaseMutex(x_hMutex);
+    if (!std::memcmp(&vIpc, &vDone, sizeof(uchfile::IpcData))) {
+        enabled(false);
+        x_lblProg.caption(
+            FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B") + L" / " +
+            FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B")
+        );
+        x_pgbProg.value(x_kucBarAmount);
+        x_lblState.caption(L"Completed, cleaning up...");
+        x_bAskCancel = false;
+        x_bCanceling = false;
+        close();
     }
-    x_upUcp->Shutdown();
-    {
-        RAII_LOCK(x_mtx);
-        x_bEofDone = true;
-        while (!(x_bUcpDone && x_bFileDone && x_bTickDone && x_bEofDone))
-            x_cv.Wait(x_mtx);
+    else {
+        x_lblProg.caption(
+            FormatSize(vIpc.uzFile, L"GiB", L"MiB", L"KiB", L"B") + L" / " +
+            FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B")
+        );
+        x_pgbProg.value(static_cast<U32>(x_kucBarAmount * vIpc.uzFile / x_uzFileSize));
+        x_lblState.caption(FormatString(L"Receiving...\nUpload = %s\nDownload = %s",
+            FormatSize(vIpc.uzSentSec, L"GiB/s", L"MiB/s", L"KiB/s", L"B/s").c_str(),
+            FormatSize(vIpc.uzRcvdSec, L"GiB/s", L"MiB/s", L"KiB/s", L"B/s").c_str()
+        ));
     }
-    msgbox mbx {u8"Uch - Receive file"};
-    mbx.icon(msgbox::icon_information);
-    mbx << L"Transmition canceled";
-    mbx();
+    x_atmbUpd.clear();
 }
 
 bool FrmFileRecv::OnTick(U64 usNow) noexcept {
-    RAII_LOCK(x_mtx);
-    if (x_bUcpDone) {
-        x_bTickDone = true;
-        x_cv.WakeAll();
-        return false;
-    }
-    if (x_atmbUpdating.test_and_set()) {
-        // lag
-        return true;
-    }
-    if (StampDue(usNow, x_usNextUpd)) {
-        Ucl::Iog().PostJob([this, usNow] {
-            x_usNextUpd = usNow + 200'000;
-            auto uzRcvd = x_upUcp->GetReceivedSize();
-            x_lblProg.caption(
-                FormatSize(uzRcvd, L"GiB", L"MiB", L"KiB", L"B") + x_sFileSize
-            );
-            x_pgbProg.value(static_cast<U32>(x_kucBarAmount * uzRcvd / x_uzFileSize));
-            if (StampDue(usNow, x_usNextSec)) {
-                x_usNextSec = usNow + 1'000'000;
-                auto uzRcvdSec = uzRcvd - std::exchange(x_uzRcvdSec, uzRcvd);
-                auto &&sState = String {L"Transmitting @ "} +
-                    FormatSize(uzRcvdSec, L"GiB/s...", L"MiB/s...", L"KiB/s...", L"B/s...");
-                x_lblState.caption(std::move(sState));
-            }
-            x_atmbUpdating.clear();
-        });
-    }
-    else {
-        x_atmbUpdating.clear();
-    }
+    user(nullptr);
     return true;
-}
-
-void FrmFileRecv::OnPacket(U32 uSize, UcpBuffer &vBuf) noexcept {
-    using namespace protocol;
-    auto byId = vBuf.Read<Byte>();
-    switch (byId) {
-    case ucpfile::kFile:
-        {
-            EvuFile e;
-            e.upChunk = x_vFcp.MakeUnique();
-            vBuf >> e;
-            e.upChunk->IncWriter(e.upChunk->GetWritable());
-            e.upChunk->Offset = static_cast<DWORD>(e.uOffset);
-            e.upChunk->OffsetHigh = static_cast<DWORD>(e.uOffset >> 32);
-            e.upChunk->pParam = reinterpret_cast<void *>(static_cast<UPtr>(uSize));
-            x_upFio->Write(e.upChunk.release());
-        }
-        break;
-    case ucpfile::kFin:
-        x_upUcp->PostPacket(EvuFinAck {});
-        x_upUcp->EndOnPacket(uSize);
-        x_upUcp->Shutdown();
-        x_atmbNormalExit.store(true);
-        x_atmbExitNeedConfirm.store(false);
-        close();
-        break;
-    case ucpfile::kFinAck:
-        x_upUcp->EndOnPacket(uSize);
-        x_upUcp->Shutdown();
-        x_atmbNormalExit.store(true);
-        x_atmbExitNeedConfirm.store(false);
-        close();
-        break;
-    default:
-        assert(false);
-    }
-}
-
-void FrmFileRecv::OnFinalize() noexcept {
-    RAII_LOCK(x_mtx);
-    x_bUcpDone = true;
-    x_cv.WakeAll();
-}
-
-void FrmFileRecv::OnForciblyClose() noexcept {}
-
-void FrmFileRecv::X_Proxy::OnFinalize() noexcept {
-    RAII_LOCK(pFrm->x_mtx);
-    pFrm->x_bFileDone = true;
-    pFrm->x_cv.WakeAll();
-}
-
-void FrmFileRecv::X_Proxy::OnForciblyClose() noexcept {}
-
-void FrmFileRecv::X_Proxy::OnWrite(DWORD dwError, U32 uDone, FileChunk *pChunk) noexcept {
-    {
-        auto upChunk = pFrm->x_vFcp.Wrap(pChunk);
-        pFrm->x_upUcp->EndOnPacket(static_cast<U32>(reinterpret_cast<UPtr>(upChunk->pParam)));
-    }
-    auto uPos = pFrm->x_atmuzFilePos.fetch_add(FileChunk::kCapacity);
-    if (uPos + FileChunk::kCapacity < pFrm->x_uzFileSize)
-        return;
-    Ucl::Iog().PostJob([this] {
-        RAII_LOCK(pFrm->x_mtx);
-        while (!pFrm->x_bFileDone)
-            pFrm->x_cv.Wait(pFrm->x_mtx);
-        std::unique_ptr<std::remove_pointer_t<HANDLE>, decltype(&CloseHandle)> hFile (
-            CreateFileHandle(pFrm->x_sFilePath, GENERIC_WRITE, OPEN_EXISTING, 0),
-            &CloseHandle
-        );
-        LARGE_INTEGER vLi;
-        vLi.QuadPart = static_cast<I64>(pFrm->x_uzFileSize);
-        auto dwb = SetFilePointerEx(hFile.get(), vLi, nullptr, FILE_BEGIN);
-        if (!dwb)
-            throw ExnSys();
-        dwb = SetEndOfFile(hFile.get());
-        if (!dwb)
-            throw ExnSys();
-        pFrm->x_bEofDone = true;
-        pFrm->x_cv.WakeAll();
-    });
-    pFrm->x_upUcp->PostPacket(protocol::EvuFin {});
-    pFrm->x_upFio->Shutdown();
 }

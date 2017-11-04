@@ -1,12 +1,13 @@
 #include "Common.hpp"
 
-int wmain(int nArgs, wchar_t *apszArgs[]) {
+int wmain() {
     System::GlobalStartup();
-    if (nArgs < 2)
-        return EXIT_FAILURE;
-    if (!lstrcmpW(apszArgs[1], L"+"))
-        return RecvMain(nArgs, apszArgs);
-    if (!lstrcmpW(apszArgs[1], L"-"))
-        return SendMain(nArgs, apszArgs);
-    return EXIT_FAILURE;
+    auto pszCmdLine = GetCommandLineW();
+    if (swscanf_s(pszCmdLine, L"%*s%s", g_szWideBuf, static_cast<unsigned>(STRCVT_BUFSIZE)) != 1)
+        throw ExnIllegalArg {};
+    if (!lstrcmpW(g_szWideBuf, L"+"))
+        return RecvMain(pszCmdLine);
+    if (!lstrcmpW(g_szWideBuf, L"-"))
+        return SendMain(pszCmdLine);
+    throw ExnIllegalArg {};
 }

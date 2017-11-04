@@ -1,6 +1,7 @@
 #include "Common.hpp"
 
-#include "FileSend.hpp"
+#include "FrmFileRecv.hpp"
+#include "FrmFileSend.hpp"
 #include "FrmMain.hpp"
 #include "Ucl.hpp"
 
@@ -13,10 +14,11 @@ FrmMain::FrmMain() :
         appear::taskbar, appear::minimize, appear::maximize, appear::sizable
     >())
 {
-    caption(String {L"Uch - Client ["} + Ucl::Usr() + L"]");
+    caption(Title(L"Client"));
     events().destroy(std::bind(&FrmMain::X_OnDestroy, this, std::placeholders::_1));
+    events().user(std::bind(&FrmMain::X_OnUser, this, std::placeholders::_1));
     events().unload([this] (const arg_unload &e) {
-        msgbox mbx {e.window_handle, u8"Uch - Exit", msgbox::yes_no};
+        msgbox mbx {nullptr, TitleU8(L"Exit"), msgbox::yes_no};
         mbx.icon(msgbox::icon_question);
         mbx << L"Are you sure to exit Uch?";
         if (mbx() != mbx.pick_yes)
@@ -53,7 +55,7 @@ FrmMain::FrmMain() :
     x_lbxUsers.append({L"Online", L"Offline"});
     x_lbxMessages.sortable(false);
     x_lbxMessages.append_header(L"When", 80);
-    x_lbxMessages.append_header(L"Who", 180);
+    x_lbxMessages.append_header(L"How", 180);
     x_lbxMessages.append_header(L"What", 310);
     x_pl.div(
         "margin=[14,16]"
@@ -73,7 +75,13 @@ FrmMain::FrmMain() :
 }
 
 void FrmMain::OnEvent(event::EvMessage &e) noexcept {
-    X_AddMessage(e.vMsg.sFrom, e.vMsg.sMessage);
+    constexpr static auto kszFmt = L"(%s) %s => %s";
+    x_lbxMessages.at(0).append({
+        FormattedTime(),
+        FormatString(L"(%s) %s => %s", e.sCat.c_str(), e.sFrom.c_str(), e.sTo.c_str()),
+        e.sWhat
+    });
+    x_lbxMessages.scroll(true);
 }
 
 void FrmMain::OnEvent(event::EvListUon &e) noexcept {
@@ -100,10 +108,14 @@ void FrmMain::OnEvent(event::EvListUff &e) noexcept {
     );
 }
 
+void FrmMain::OnEvent(event::EvFileReq &e) noexcept {
+    user(std::make_unique<event::EvFileReq>(e).release());
+}
+
 void FrmMain::X_OnSend() {
     auto vec = x_lbxUsers.selected();
     if (vec.empty()) {
-        msgbox mbx {*this, u8"Uch - Send message", msgbox::ok};
+        msgbox mbx {nullptr, TitleU8(L"Send message"), msgbox::ok};
         mbx.icon(msgbox::icon_error);
         mbx << L"Please select a recipient";
         mbx();
@@ -114,14 +126,14 @@ void FrmMain::X_OnSend() {
     switch (idx.cat) {
     case 1:
         // Online
-        X_AddMessage(String {L"[Me] => "} + sUser, x_txtMessage.caption_wstring());
+        X_AddMessage({kszCatChat, kszSelf, sUser, x_txtMessage.caption_wstring()});
         (*Ucl::Pmg())[sUser].PostPacket(protocol::EvpMessage {
             x_txtMessage.caption_wstring()
         });
         break;
     case 2:
         // Offline
-        X_AddMessage(String {L"(Offline) [Me] => "} + sUser, x_txtMessage.caption_wstring());
+        X_AddMessage({kszCatFmsg, kszSelf, sUser, x_txtMessage.caption_wstring()});
         Ucl::Con()->PostPacket(protocol::EvcMessageTo {
             sUser, x_txtMessage.caption_wstring()
         });
@@ -135,7 +147,7 @@ void FrmMain::X_OnSend() {
 void FrmMain::X_OnFile() {
     auto vec = x_lbxUsers.selected();
     if (vec.empty()) {
-        msgbox mbx {*this, u8"Uch - Send file", msgbox::ok};
+        msgbox mbx {TitleU8(L"Send file")};
         mbx.icon(msgbox::icon_error);
         mbx << L"Please select a recipient";
         mbx();
@@ -143,20 +155,28 @@ void FrmMain::X_OnFile() {
     }
     auto &idx = vec.front();
     if (idx.cat != 1) {
-        msgbox mbx {*this, u8"Uch - Send file", msgbox::ok};
+        msgbox mbx {TitleU8(L"Send file")};
         mbx.icon(msgbox::icon_error);
         mbx << L"Please select an online user";
         mbx();
         return;
     }
     auto sUser = AsWideString(x_lbxUsers.at(idx.cat).at(idx.item).text(0));
-    filebox fbx {*this, true};
+    filebox fbx {nullptr, true};
     if (!fbx())
         return;
     auto sPath = AsWideString(fbx.file());
-    auto pPipl = &(*Ucl::Pmg())[sUser];
-    // will leak of course, just let it go
-    new FileSend(pPipl, sPath);
+    UccPipl *pPipl;
+    try {
+        pPipl = &(*Ucl::Pmg())[sUser];
+    }
+    catch (std::out_of_range) {
+        msgbox mbx {TitleU8(L"Send file")};
+        mbx << L"The user if offline";
+        mbx();
+        return;
+    }
+    form_loader<FrmFileSend>() (*this, pPipl, sPath).show();
 }
 
 void FrmMain::X_OnDestroy(const nana::arg_destroy &e) {
@@ -166,7 +186,16 @@ void FrmMain::X_OnDestroy(const nana::arg_destroy &e) {
     Ucl::Bus().Unregister(*this);
 }
 
-void FrmMain::X_AddMessage(const String &sWho, const String &sWhat) {
-    x_lbxMessages.at(0).append({FormattedTime(), sWho, sWhat});
-    x_lbxMessages.scroll(true);
+void FrmMain::X_OnUser(const nana::arg_user &e) {
+    std::unique_ptr<event::EvFileReq> up {
+        reinterpret_cast<event::EvFileReq *>(e.param)
+    };
+    try {
+        form_loader<FrmFileRecv>() (*this, up->pPipl, up->eReq).show();
+    }
+    catch (ExnIllegalState) {}
+}
+
+void FrmMain::X_AddMessage(event::EvMessage &&e) noexcept {
+    OnEvent(e);
 }

@@ -2,9 +2,6 @@
 
 #include "Common.hpp"
 
-#include "../UchCommon/FileIo.hpp"
-#include "../UchCommon/Ucp.hpp"
-
 #include "Event.hpp"
 #include "UccPipl.hpp"
 
@@ -13,18 +10,24 @@
 #include <nana/gui/widgets/label.hpp>
 #include <nana/gui/widgets/progress.hpp>
 
-class FrmFileRecv : public nana::form {
+class FrmFileRecv :
+    public nana::form,
+    public HandlerBase<
+        protocol::EvpFileCancel
+    >
+{
 public:
-    FrmFileRecv(const event::EvFileRecv &e);
+    FrmFileRecv(const nana::form &frmParent, UccPipl *pPipl, const protocol::EvpFileReq &e);
+
+public:
+    void OnEvent(protocol::EvpFileCancel &e) noexcept override;
 
 private:
     void X_OnDestroy(const nana::arg_destroy &e);
+    void X_OnUser();
 
 public:
     bool OnTick(U64 usNow) noexcept;
-    void OnPacket(U32 uSize, UcpBuffer &vBuf) noexcept;
-    void OnFinalize() noexcept;
-    void OnForciblyClose() noexcept;
 
 private:
     nana::place x_pl {*this};
@@ -35,42 +38,28 @@ private:
     nana::progress x_pgbProg {*this};
 
 private:
-    struct X_Proxy {
-        void OnFinalize() noexcept;
-        void OnForciblyClose() noexcept;
-        void OnWrite(DWORD dwError, U32 uDone, FileChunk *pChunk) noexcept;
-
-        FrmFileRecv *pFrm;
-    };
-
-private:
-    FileChunkPool x_vFcp;
-
-    RecursiveMutex x_mtx;
-    ConditionVariable x_cv;
-    bool x_bUcpDone = false;
-    bool x_bFileDone = false;
-    bool x_bTickDone = false;
-    bool x_bEofDone = false;
-    std::atomic<bool> x_atmbNormalExit = false;
-    std::atomic<bool> x_atmbExitNeedConfirm = true;
-
-    X_Proxy x_vProxy {this};
-    UccPipl *x_pPipl = nullptr;
-    std::unique_ptr<Ucp<FrmFileRecv>> x_upUcp;
-    std::unique_ptr<FileIo<X_Proxy>> x_upFio;
-    U64 x_uzFileSize = 0;
-    U64 x_uzUcpSize = 0;
-    String x_sFileSize;
+    U64 x_uId;
+    UccPipl *x_pPipl;
+    String x_sFileName;
     String x_sFilePath;
-    std::atomic<U64> x_atmuzFilePos = 0;
-    std::atomic<U32> x_atmucFileChunks = 0;
-    U64 x_uzRcvdSec = 0;
-    U64 x_usNextSec = 0;
-    U64 x_usNextUpd = 0;
-    std::atomic_flag x_atmbUpdating {};
+    U64 x_uzFileSize;
+    std::string x_su8MbxTitle;
+    PROCESS_INFORMATION x_vPi {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE, 0, 0};
+    HANDLE x_hFile = INVALID_HANDLE_VALUE;
+    SOCKET x_hSocket = INVALID_SOCKET;
+    HANDLE x_hEvent = INVALID_HANDLE_VALUE;
+    HANDLE x_hMapping = INVALID_HANDLE_VALUE;
+    HANDLE x_hMutex = INVALID_HANDLE_VALUE;
     
+    bool x_bAskCancel = true;
+    bool x_bCanceling = true;
+    
+    U64 x_usNextUpd = 0;
+    std::atomic_flag x_atmbUpd {};
+
+    Mutex x_mtx;
+
 private:
-    constexpr static U32 x_kucBarAmount = 1U << 12;
+    constexpr static U32 x_kucBarAmount = 4096;
 
 };

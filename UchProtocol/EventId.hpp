@@ -31,11 +31,12 @@ namespace protocol {
 
     namespace p2pchat {
         enum Id : Byte {
-            kExit = clsv::x_kEnd,
+            kExit = svcl::x_kEnd,
             kAuth,
             kMessage,
             kFileReq,
             kFileRes,
+            kFileCancel,
             x_kEnd,
         };
     }

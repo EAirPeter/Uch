@@ -1,9 +1,11 @@
 #include "Common.hpp"
 
+#include "IpcData.hpp"
+
 class X_Receiver {
 public:
-    X_Receiver(HANDLE hFile, SOCKET hSocket, U64 uSize) :
-        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket), x_uzFileSize(uSize)
+    X_Receiver(HANDLE hFile, SOCKET hSocket, U64 uSize, HANDLE hMapping, HANDLE hMutex) :
+        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket), x_uzFileSize(uSize), x_hMapping(hMapping), x_hMutex(hMutex)
     {
         x_vIogUcp.Start();
         x_vIogOth.Start();
@@ -48,6 +50,15 @@ public:
             L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-done=%I64u\n",
             uzRcvd, uzSent, x_uzFileSize, uzWritten
         );
+        WaitForSingleObject(x_hMutex, INFINITE);
+        auto pIpc = reinterpret_cast<uchfile::IpcData *>(
+            MapViewOfFile(x_hMapping, FILE_MAP_WRITE, 0, 0, sizeof(uchfile::IpcData))
+        );
+        pIpc->uzRcvdSec = static_cast<U32>(uzRcvd);
+        pIpc->uzSentSec = static_cast<U32>(uzSent);
+        pIpc->uzFile = uzWritten;
+        UnmapViewOfFile(pIpc);
+        ReleaseMutex(x_hMutex);
         return true;
     }
 
@@ -140,35 +151,39 @@ private:
     bool x_bFioDone = false;
     Mutex x_mtx;
     ConditionVariable x_cv;
+    
+    HANDLE x_hMapping;
+    HANDLE x_hMutex;
 
 };
 
-int RecvMain(int nArgs, wchar_t *apszArgs[]) {
-    if (nArgs != 6)
-        return EXIT_FAILURE;
-    void *pFile, *pSocket, *pEvent;
-    if (swscanf_s(apszArgs[2], L"%p", &pFile) != 1)
-        return EXIT_FAILURE;
-    if (swscanf_s(apszArgs[3], L"%p", &pSocket) != 1)
-        return EXIT_FAILURE;
-    if (swscanf_s(apszArgs[4], L"%p", &pEvent) != 1)
-        return EXIT_FAILURE;
+int RecvMain(PCWSTR pszCmdLine) {
+    UPtr uMapping, uMutex, uFile, uSocket, uEvent;
     U64 uSize;
-    if (swscanf_s(apszArgs[5], L"%I64u", &uSize) != 1)
-        return EXIT_FAILURE;
-    auto hFile = reinterpret_cast<HANDLE>(pFile);
-    auto hSocket = reinterpret_cast<SOCKET>(pSocket);
-    auto hEvent = reinterpret_cast<HANDLE>(pEvent);
-    DWORD dw;
-    if (!GetHandleInformation(hFile, &dw))
-        return EXIT_FAILURE;
-    if (!GetHandleInformation(reinterpret_cast<HANDLE>(hSocket), &dw))
-        return EXIT_FAILURE;
-    if (!GetHandleInformation(hEvent, &dw))
-        return EXIT_FAILURE;
-    X_Receiver vRecv {hFile, hSocket, uSize};
+    auto nRes = swscanf_s(
+        pszCmdLine,
+        L"%*s%*s%" CONCAT(L, SCNuPTR) L"%" CONCAT(L, SCNuPTR) L"%" CONCAT(L, SCNuPTR)
+            L"%" CONCAT(L, SCNuPTR) L"%" CONCAT(L, SCNuPTR) L"%" CONCAT(L, SCNu64),
+        &uMapping, &uMutex, &uFile, &uSocket, &uEvent, &uSize
+    );
+    if (nRes != 6)
+        throw ExnIllegalArg {};
+    auto hMapping = HandleCast(uMapping);
+    auto hMutex = HandleCast(uMutex);
+    auto hFile = HandleCast(uFile);
+    auto hSocket = reinterpret_cast<SOCKET>(HandleCast(uSocket));
+    auto hEvent = HandleCast(uEvent);
+    X_Receiver vRecv {hFile, hSocket, uSize, hMapping, hMutex};
     SetEvent(hEvent);
     vRecv.Wait();
     CloseHandle(hEvent);
+    constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
+    WaitForSingleObject(hMutex, INFINITE);
+    auto pIpc = reinterpret_cast<uchfile::IpcData *>(
+        MapViewOfFile(hMapping, FILE_MAP_WRITE, 0, 0, sizeof(uchfile::IpcData))
+    );
+    memcpy(pIpc, &vDone, sizeof(uchfile::IpcData));
+    UnmapViewOfFile(pIpc);
+    ReleaseMutex(hMutex);
     return 0;
 }
