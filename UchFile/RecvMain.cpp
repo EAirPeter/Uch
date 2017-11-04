@@ -43,8 +43,9 @@ public:
         uzRcvd -= std::exchange(x_uzRcvd, uzRcvd);
         uzSent -= std::exchange(x_uzSent, uzSent);
         auto uzWritten = x_atmuzFileWritten.load();
+        x_vUcp.PostPacket(protocol::EvuProgress {uzWritten});
         Printf(
-            L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-written=%I64u\n",
+            L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-done=%I64u\n",
             uzRcvd, uzSent, x_uzFileSize, uzWritten
         );
         return true;

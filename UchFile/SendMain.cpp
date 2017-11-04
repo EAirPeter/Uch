@@ -55,10 +55,10 @@ public:
             auto uzSent = x_vUcp.GetSentSize();
             uzRcvd -= std::exchange(x_uzRcvd, uzRcvd);
             uzSent -= std::exchange(x_uzSent, uzSent);
-            auto uzRead = x_atmuzFileRead.load();
+            auto uzWritten = x_atmuzFileWritten.load();
             Printf(
-                L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-read=%I64u\n",
-                uzRcvd, uzSent, x_uzFileSize, uzRead
+                L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-done=%I64u\n",
+                uzRcvd, uzSent, x_uzFileSize, uzWritten
             );
         }
         return true;
@@ -76,6 +76,10 @@ public:
         using namespace protocol;
         auto byId = vBuf.Read<Byte>();
         switch (byId) {
+        case ucpfile::kProgress:
+            x_atmuzFileWritten.store(vBuf.Read<EvuProgress>().uSize);
+            x_vUcp.EndOnPacket(uSize);
+            break;
         case ucpfile::kFin:
             x_vUcp.PostPacket(EvuFinAck {});
             x_vUcp.EndOnPacket(uSize);
@@ -103,7 +107,6 @@ private:
 
         void OnRead(DWORD dwError, U32 uDone, FileChunk *pChunk) noexcept {
             auto upChunk = p->x_vFcp.Wrap(pChunk);
-            p->x_atmuzFileRead.fetch_add(uDone);
             auto uzOffset = static_cast<U64>(upChunk->OffsetHigh) << 32 | upChunk->Offset;
             p->x_vUcp.PostPacket(protocol::EvuFile {
                 uzOffset, std::move(upChunk)
@@ -127,7 +130,7 @@ private:
     std::atomic<U32> x_atmucFileChunks = 0;
 
     U64 x_uzFileSize = 0;
-    std::atomic<U64> x_atmuzFileRead = 0;
+    std::atomic<U64> x_atmuzFileWritten = 0;
     std::atomic<U64> x_atmuzFileOffset = 0;
     
     U64 x_uzRcvd = 0;

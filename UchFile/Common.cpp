@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Common.hpp"
 
 void PrintConsole(const String &s) {

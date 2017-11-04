@@ -43,6 +43,7 @@ namespace protocol {
     namespace ucpfile {
         enum Id : Byte {
             kFile = p2pchat::x_kEnd,
+            kProgress,
             kFin,
             kFinAck,
             x_kEnd,

@@ -36,9 +36,11 @@ private:
 
     template<class tHandler, class tEvent, class ...tvEvents>
     inline void X_Register(tHandler &vHandler) noexcept {
-        auto &vCtx = x_aCtx[tEvent::kEventId];
-        RAII_LOCK(vCtx.rwl.WriteLock());
-        vCtx.set.emplace(reinterpret_cast<void *>(static_cast<tEvent::Handler *>(&vHandler)));
+        {
+            auto &vCtx = x_aCtx[tEvent::kEventId];
+            RAII_LOCK(vCtx.rwl.WriteLock());
+            vCtx.set.emplace(reinterpret_cast<void *>(static_cast<tEvent::Handler *>(&vHandler)));
+        }
         X_Register<tHandler, tvEvents...>(vHandler);
     }
     

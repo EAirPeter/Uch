@@ -50,15 +50,26 @@ void FileRecv::Run(UccPipl *pPipl, const protocol::EvpFileReq &e) {
     std::vector<wchar_t> vecCmdLine {g_szWideBuf, g_szWideBuf + uLen + 1};
     uLen = Format(L"Uch - Receiving [%s] from [%s]...", e.sName.c_str(), pPipl->GetUser().c_str());
     std::vector<wchar_t> vecTitle {g_szWideBuf, g_szWideBuf + uLen + 1};
-    STARTUPINFOW vSi {static_cast<DWORD>(sizeof(STARTUPINFOW))};
-    vSi.lpTitle = vecTitle.data();
+    USize uAttrListSize;
+    InitializeProcThreadAttributeList(nullptr, 1, 0, &uAttrListSize);
+    STARTUPINFOEXW vSix {
+        {static_cast<DWORD>(sizeof(STARTUPINFOEXW))},
+        reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(::operator new(uAttrListSize))
+    };
+    InitializeProcThreadAttributeList(vSix.lpAttributeList, 1, 0, &uAttrListSize);
+    HANDLE ahInherit[3] {hFile, reinterpret_cast<HANDLE>(hSocket), hEvent};
+    UpdateProcThreadAttribute(
+        vSix.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+        ahInherit, sizeof(ahInherit), nullptr, nullptr
+    );
+    vSix.StartupInfo.lpTitle = vecTitle.data();
     PROCESS_INFORMATION vPi;
     if (CreateProcessW(
         Ucl::Ucf().c_str(), vecCmdLine.data(),
         nullptr, nullptr, true,
-        CREATE_NEW_CONSOLE | HIGH_PRIORITY_CLASS,
+        CREATE_NEW_CONSOLE | HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
         nullptr, nullptr,
-        &vSi, &vPi
+        &vSix.StartupInfo, &vPi
     ))
     {
         WaitForSingleObject(hEvent, INFINITE);

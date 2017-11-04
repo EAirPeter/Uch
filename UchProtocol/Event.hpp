@@ -102,6 +102,11 @@ namespace protocol {
 #   define UEV_MEMBERS UEV_VAL(U64, uOffset) UEV_END(FileChunkPool::UniquePtr, upChunk)
 #   include "../UchCommon/GenEvent.inl"
 
+#   define UEV_ID ucpfile::kProgress
+#   define UEV_NAME EvuProgress
+#   define UEV_MEMBERS UEV_END(U64, uSize)
+#   include "../UchCommon/GenEvent.inl"
+
 #   define UEV_ID ucpfile::kFin
 #   define UEV_NAME EvuFin
 #   include "../UchCommon/GenEvent.inl"
