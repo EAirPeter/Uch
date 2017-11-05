@@ -17,11 +17,11 @@ The code is [unlicensed](http://unlicense.org/).
 
 ### Dependencies
 * [`nana`](http://nanapro.org/en-us/) ([modified](https://github.com/EAirPeter/nana) in order to add user event)  
- * Providing GUIs  
+  Providing GUIs  
 * [`Crypto++`](https://www.cryptopp.com/)  
- * Providing AES 256-CFB and SHA-256  
+  Providing AES 256-CFB and SHA-256  
 * [`yaml-cpp`](https://github.com/jbeder/yaml-cpp)  
- * Providing configuration files  
+  Providing configuration files  
 
 Their licenses are placed [here](Dependencies/).  
 
