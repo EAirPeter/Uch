@@ -2,6 +2,7 @@
 
 #include "../UchFile/IpcData.hpp"
 
+#include "Event.hpp"
 #include "FrmFileRecv.hpp"
 #include "Ucl.hpp"
 
@@ -59,15 +60,15 @@ FrmFileRecv::FrmFileRecv(const nana::form &frmParent, UccPipl *pPipl, const prot
             close();
     });
     x_lblName.caption(x_sFilePath);
-    x_lblState.caption(L"Receiving...\nUpload = 0 B/s\nDownload = 0 B/s");
-    x_lblProg.text_align(align::right, align_v::center).caption(String {L"0B"});
+    x_lblState.caption(L"Preparing to receive...");
+    x_lblProg.text_align(align::right, align_v::center);
     x_pgbProg.amount(x_kucBarAmount);
     x_pl.div(
         "margin=[14,16] vert"
         "   <vfit=448 Name> <weight=7>"
         "   <weight=25 Plbl> <weight=7>"
         "   <weight=25 Pbar> <weight=7>"
-        "   <vfit=448 Stat> <>"
+        "   <Stat> <weight=7>"
         "   <weight=25 <> <weight=81 Canc>>"
     );
     x_pl["Name"] << x_lblName;
@@ -117,7 +118,7 @@ FrmFileRecv::FrmFileRecv(const nana::form &frmParent, UccPipl *pPipl, const prot
     auto dwbRes = CreateProcessW(
         Ucl::Ucf().c_str(), g_szWideBuf,
         nullptr, nullptr, true,
-        CREATE_NEW_CONSOLE | HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
+        HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
         nullptr, nullptr,
         &vSix.StartupInfo, &x_vPi
     );
@@ -196,12 +197,6 @@ void FrmFileRecv::X_OnUser() {
         // lag
         return;
     }
-    auto usNow = GetTimeStamp();
-    if (!StampDue(usNow, x_usNextUpd)) {
-        x_atmbUpd.clear();
-        return;
-    }
-    x_usNextUpd = usNow + 1'000'000;
     constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
     WaitForSingleObject(x_hMutex, INFINITE);
     auto pIpc = reinterpret_cast<const uchfile::IpcData *>(

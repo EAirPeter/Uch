@@ -4,7 +4,6 @@
 
 #include "Event.hpp"
 #include "FrmFileSend.hpp"
-#include "UccPipl.hpp"
 #include "Ucl.hpp"
 
 using namespace nana;
@@ -37,7 +36,7 @@ FrmFileSend::FrmFileSend(const nana::form &frmParent, UccPipl *pPipl, const Stri
             close();
     });
     x_lblName.caption(sPath);
-    x_lblState.caption(L"Sending...\nUpload = 0 B/s\nDownload = 0 B/s");
+    x_lblState.caption(L"Waiting to be accepted...");
     x_lblProg.text_align(align::right, align_v::center);
     x_pgbProg.amount(x_kucBarAmount);
     x_pl.div(
@@ -45,7 +44,7 @@ FrmFileSend::FrmFileSend(const nana::form &frmParent, UccPipl *pPipl, const Stri
         "   <vfit=448 Name> <weight=7>"
         "   <weight=25 Plbl> <weight=7>"
         "   <weight=25 Pbar> <weight=7>"
-        "   <vfit=448 Stat> <>"
+        "   <Stat> <weight=7>"
         "   <weight=25 <> <weight=81 Canc>>"
     );
     x_pl["Name"] << x_lblName;
@@ -113,7 +112,7 @@ void FrmFileSend::OnEvent(protocol::EvpFileRes &e) noexcept {
         auto dwbRes = CreateProcessW(
             Ucl::Ucf().c_str(), g_szWideBuf,
             nullptr, nullptr, true,
-            CREATE_NEW_CONSOLE | HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
+            HIGH_PRIORITY_CLASS | EXTENDED_STARTUPINFO_PRESENT,
             nullptr, nullptr,
             &vSix.StartupInfo, &x_vPi
         );
@@ -181,12 +180,6 @@ void FrmFileSend::X_OnUser() {
         // lag
         return;
     }
-    auto usNow = GetTimeStamp();
-    if (!StampDue(usNow, x_usNextUpd)) {
-        x_atmbUpd.clear();
-        return;
-    }
-    x_usNextUpd = usNow + 1'000'000;
     constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
     WaitForSingleObject(x_hMutex, INFINITE);
     auto pIpc = reinterpret_cast<const uchfile::IpcData *>(
@@ -213,7 +206,7 @@ void FrmFileSend::X_OnUser() {
             FormatSize(x_uzFileSize, L"GiB", L"MiB", L"KiB", L"B")
         );
         x_pgbProg.value(static_cast<U32>(x_kucBarAmount * vIpc.uzFile / x_uzFileSize));
-        x_lblState.caption(FormatString(L"Receiving...\nUpload = %s\nDownload = %s",
+        x_lblState.caption(FormatString(L"Sending...\nUpload = %s\nDownload = %s",
             FormatSize(vIpc.uzSentSec, L"GiB/s", L"MiB/s", L"KiB/s", L"B/s").c_str(),
             FormatSize(vIpc.uzRcvdSec, L"GiB/s", L"MiB/s", L"KiB/s", L"B/s").c_str()
         ));

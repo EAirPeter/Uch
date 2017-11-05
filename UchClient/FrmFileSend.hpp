@@ -55,7 +55,6 @@ private:
     bool x_bAskCancel = true;
     bool x_bCanceling = true;
 
-    U64 x_usNextUpd = 0;
     std::atomic_flag x_atmbUpd {};
 
 private:

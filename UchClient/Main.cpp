@@ -10,7 +10,7 @@
 
 Ucl Ucl::x_vInstance {};
 
-int wmain() {
+int APIENTRY wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     try {
         System::GlobalStartup();
         auto dwb = GetModuleFileNameW(nullptr, g_szWideBuf, STRCVT_BUFSIZE);

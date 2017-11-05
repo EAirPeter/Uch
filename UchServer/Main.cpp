@@ -9,7 +9,7 @@
 
 Usv Usv::x_vInstance {};
 
-int wmain() {
+int APIENTRY wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
     try {
         System::GlobalStartup();
         Usv::Cfg().Load();

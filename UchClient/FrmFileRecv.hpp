@@ -2,7 +2,6 @@
 
 #include "Common.hpp"
 
-#include "Event.hpp"
 #include "UccPipl.hpp"
 
 #include <nana/gui.hpp>
@@ -54,7 +53,6 @@ private:
     bool x_bAskCancel = true;
     bool x_bCanceling = true;
     
-    U64 x_usNextUpd = 0;
     std::atomic_flag x_atmbUpd {};
 
     Mutex x_mtx;

@@ -13,12 +13,5 @@
 
 HANDLE HandleCast(UPtr uHandle);
 
-void PrintConsole(const String &s);
-
-template<class ...tvArgs>
-inline void Printf(PCWSTR pszFmt, tvArgs &&...vArgs) {
-    PrintConsole(FormatString(pszFmt, std::forward<tvArgs>(vArgs)...));
-}
-
 int RecvMain(PCWSTR pszCmdLine);
 int SendMain(PCWSTR pszCmdLine);

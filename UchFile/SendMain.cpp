@@ -59,10 +59,6 @@ public:
             uzRcvd -= std::exchange(x_uzRcvd, uzRcvd);
             uzSent -= std::exchange(x_uzSent, uzSent);
             auto uzWritten = x_atmuzFileWritten.load();
-            Printf(
-                L"recv-sec=%-10I64u send-sec=%-10I64u file-total=%I64u file-done=%I64u\n",
-                uzRcvd, uzSent, x_uzFileSize, uzWritten
-            );
             WaitForSingleObject(x_hMutex, INFINITE);
             auto pIpc = reinterpret_cast<uchfile::IpcData *>(
                 MapViewOfFile(x_hMapping, FILE_MAP_WRITE, 0, 0, sizeof(uchfile::IpcData))
@@ -130,7 +126,7 @@ private:
     };
 
 private:
-    IoGroup x_vIogUcp {TP_CALLBACK_PRIORITY_HIGH, 10, GetProcessors()};
+    IoGroup x_vIogUcp {TP_CALLBACK_PRIORITY_HIGH, 8, GetProcessors()};
     IoGroup x_vIogOth {TP_CALLBACK_PRIORITY_NORMAL, 200, 1};
 
     FileChunkPool x_vFcp;
