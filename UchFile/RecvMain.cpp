@@ -1,12 +1,17 @@
 #include "Common.hpp"
 
 #include "IpcData.hpp"
+#include "Log.hpp"
 
 class X_Receiver {
 public:
     X_Receiver(HANDLE hFile, SOCKET hSocket, U64 uSize, HANDLE hMapping, HANDLE hMutex) :
-        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket), x_uzFileSize(uSize), x_hMapping(hMapping), x_hMutex(hMutex)
+        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket),
+        x_uzFileSize(uSize), x_hMapping(hMapping), x_hMutex(hMutex)
     {
+        auto dwRes = GetFinalPathNameByHandleW(hFile, g_szWideBuf, STRCVT_BUFSIZE, 0);
+        x_sFilePath = {g_szWideBuf, dwRes};
+        x_upLog = std::make_unique<Log>(x_sFilePath, x_uzFileSize);
         x_vIogUcp.Start();
         x_vIogOth.Start();
         SetFileSize(
@@ -15,6 +20,7 @@ public:
         );
         x_vUcp.AssignToIoGroup(x_vIogUcp);
         x_vFio.AssignToIoGroup(x_vIogOth);
+        x_upLog->TimeStart();
         x_vIogOth.RegisterTick(*this);
     }
 
@@ -28,10 +34,15 @@ public:
         RAII_LOCK(x_mtx);
         while (!(x_bTikDone && x_bUcpDone && x_bFioDone))
             x_cv.Wait(x_mtx);
+        x_upLog->TimeStop();
+        x_upLog->SetTotal(x_vUcp.GetReceivedSize(), x_vUcp.GetSentSize());
+    }
+
+    void SaveLog() {
+        x_upLog->Save(L"recv.log");
     }
 
     bool OnTick(U64 usNow) noexcept {
-        UNREFERENCED_PARAMETER(usNow);
         {
             RAII_LOCK(x_mtx);
             if (x_bUcpDone) {
@@ -46,6 +57,7 @@ public:
         uzSent -= std::exchange(x_uzSent, uzSent);
         auto uzWritten = x_atmuzFileWritten.load();
         x_vUcp.PostPacket(protocol::EvuProgress {uzWritten});
+        x_upLog->Record(usNow, static_cast<U32>(uzRcvd), static_cast<U32>(uzSent), uzWritten);
         WaitForSingleObject(x_hMutex, INFINITE);
         auto pIpc = reinterpret_cast<uchfile::IpcData *>(
             MapViewOfFile(x_hMapping, FILE_MAP_WRITE, 0, 0, sizeof(uchfile::IpcData))
@@ -100,10 +112,8 @@ public:
 private:
     struct X_Proxy {
         void OnFinalize() noexcept {
-            auto hFile = p->x_vFio.GetNative();
-            auto dwRes = GetFinalPathNameByHandleW(hFile, g_szWideBuf, STRCVT_BUFSIZE, 0);
-            CloseHandle(hFile);
-            auto uhFile = CreateFileHandle(String {g_szWideBuf, dwRes}, GENERIC_WRITE, OPEN_EXISTING, 0);
+            CloseHandle(p->x_vFio.GetNative());
+            auto uhFile = CreateFileHandle(p->x_sFilePath, GENERIC_WRITE, OPEN_EXISTING, 0);
             SetFileSize(uhFile.get(), p->x_uzFileSize);
             uhFile.reset();
             RAII_LOCK(p->x_mtx);
@@ -130,12 +140,15 @@ private:
     IoGroup x_vIogUcp {TP_CALLBACK_PRIORITY_HIGH, 8, GetProcessors()};
     IoGroup x_vIogOth {TP_CALLBACK_PRIORITY_NORMAL, 1000, 1};
 
+    std::unique_ptr<Log> x_upLog {};
+
     FileChunkPool x_vFcp;
     X_Proxy x_vProxy {this};
 
     FileIo<X_Proxy> x_vFio;
     Ucp<X_Receiver> x_vUcp;
 
+    String x_sFilePath;
     U64 x_uzFileSize = 0;
     std::atomic<U64> x_atmuzFileWritten = 0;
     
@@ -172,6 +185,7 @@ int RecvMain(PCWSTR pszCmdLine) {
     X_Receiver vRecv {hFile, hSocket, uSize, hMapping, hMutex};
     SetEvent(hEvent);
     vRecv.Wait();
+    vRecv.SaveLog();
     CloseHandle(hEvent);
     constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
     WaitForSingleObject(hMutex, INFINITE);

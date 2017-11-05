@@ -134,6 +134,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Log.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="RecvMain.cpp" />
     <ClCompile Include="SendMain.cpp" />
@@ -147,6 +148,7 @@
     <ClInclude Include="Common.hpp" />
     <ClCompile Include="Common.cpp" />
     <ClInclude Include="IpcData.hpp" />
+    <ClInclude Include="Log.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

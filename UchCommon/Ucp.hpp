@@ -11,7 +11,7 @@
 
 #define UCP_TRANSMIT
 // #define UCP_NOCNGCON
-#define UCP_NORWND
+// #define UCP_NORWND
 
 #if defined(UCP_NOCNGCON) && defined(UCP_NORWND)
 #   define UCP_NOUZPSH

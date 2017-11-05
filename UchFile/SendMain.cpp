@@ -1,18 +1,23 @@
 #include "Common.hpp"
 
 #include "IpcData.hpp"
+#include "Log.hpp"
 
 class X_Sender {
 public:
     X_Sender(HANDLE hFile, SOCKET hSocket, HANDLE hMapping, HANDLE hMutex) :
-        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket), x_uzFileSize(x_vFio.GetSize()),
-        x_hMapping(hMapping), x_hMutex(hMutex)
+        x_vFio(x_vProxy, hFile), x_vUcp(*this, hSocket),
+        x_uzFileSize(x_vFio.GetSize()), x_hMapping(hMapping), x_hMutex(hMutex)
     {
+        auto dwRes = GetFinalPathNameByHandleW(hFile, g_szWideBuf, STRCVT_BUFSIZE, 0);
+        x_sFilePath = {g_szWideBuf, dwRes};
+        x_upLog = std::make_unique<Log>(x_sFilePath, x_uzFileSize);
         x_vIogUcp.Start();
         x_vIogOth.Start();
         x_atmucFileChunks.store(x_kucFileChunks);
         x_vUcp.AssignToIoGroup(x_vIogUcp);
         x_vFio.AssignToIoGroup(x_vIogOth);
+        x_upLog->TimeStart();
         x_vIogOth.RegisterTick(*this);
     }
 
@@ -26,6 +31,12 @@ public:
         RAII_LOCK(x_mtx);
         while (!(x_bTikDone && x_bUcpDone && x_bFioDone))
             x_cv.Wait(x_mtx);
+        x_upLog->TimeStop();
+        x_upLog->SetTotal(x_vUcp.GetReceivedSize(), x_vUcp.GetSentSize());
+    }
+
+    void SaveLog() {
+        x_upLog->Save(L"send.log");
     }
 
     bool OnTick(U64 usNow) noexcept {
@@ -59,6 +70,7 @@ public:
             uzRcvd -= std::exchange(x_uzRcvd, uzRcvd);
             uzSent -= std::exchange(x_uzSent, uzSent);
             auto uzWritten = x_atmuzFileWritten.load();
+            x_upLog->Record(usNow, static_cast<U32>(uzRcvd), static_cast<U32>(uzSent), uzWritten);
             WaitForSingleObject(x_hMutex, INFINITE);
             auto pIpc = reinterpret_cast<uchfile::IpcData *>(
                 MapViewOfFile(x_hMapping, FILE_MAP_WRITE, 0, 0, sizeof(uchfile::IpcData))
@@ -128,6 +140,8 @@ private:
 private:
     IoGroup x_vIogUcp {TP_CALLBACK_PRIORITY_HIGH, 8, GetProcessors()};
     IoGroup x_vIogOth {TP_CALLBACK_PRIORITY_NORMAL, 200, 1};
+    
+    std::unique_ptr<Log> x_upLog {};
 
     FileChunkPool x_vFcp;
     X_Proxy x_vProxy {this};
@@ -136,7 +150,8 @@ private:
     Ucp<X_Sender> x_vUcp;
 
     std::atomic<U32> x_atmucFileChunks = 0;
-
+    
+    String x_sFilePath;
     U64 x_uzFileSize = 0;
     std::atomic<U64> x_atmuzFileWritten = 0;
     std::atomic<U64> x_atmuzFileOffset = 0;
@@ -176,6 +191,7 @@ int SendMain(PCWSTR pszCmdLine) {
     auto hSocket = reinterpret_cast<SOCKET>(HandleCast(uSocket));
     X_Sender vSend {hFile, hSocket, hMapping, hMutex};
     vSend.Wait();
+    vSend.SaveLog();
     constexpr static uchfile::IpcData vDone {~0, ~0, ~0};
     WaitForSingleObject(hMutex, INFINITE);
     auto pIpc = reinterpret_cast<uchfile::IpcData *>(

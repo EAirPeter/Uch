@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Common.hpp"
+#include "../UchCommon/Common.hpp"
 
 namespace uchfile {
     struct IpcData {

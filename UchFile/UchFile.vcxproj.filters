@@ -18,13 +18,21 @@
     <ClCompile Include="SendMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Common.cpp" />
+    <ClCompile Include="Log.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Common.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IpcData.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Log.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
