@@ -33,7 +33,7 @@ Their licenses are placed [here](Dependencies/).
 [`UchFile`](UchFile/) provides the file transmitting routine.  
 
 ### Notes - part 1
-P2P file transmitting is implemented over a handmade RDT protocol called [Ucp](UchCommon/Ucp.hpp).  
+P2P file transmitting is implemented over a handmade RDT protocol called [`Ucp`](UchCommon/Ucp.hpp).  
 [`UchFile`](UchFile/) is called as a child process.  
 Windows Socket 2 and Windows API plays an important role in this application.  
 Again, the `nana` GUI library is [modified](https://github.com/EAirPeter/nana).  
